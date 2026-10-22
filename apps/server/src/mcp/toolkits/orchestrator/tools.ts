@@ -223,7 +223,7 @@ const ThreadReadTool = Tool.make("t3_thread_read", {
 
 const ThreadUpdateTool = Tool.make("t3_thread_update", {
   description:
-    "Update metadata for a thread. Omit threadId to update this thread. Use action='rename' with title, action='regenerate_title', action='link_pull_request' with pullRequest, action='unlink_pull_request', action='add_resource' with resource {kind:'file'|'link',target,label?}, or action='remove_resource' with resourceId. Register generated files and useful links with add_resource so they appear in the thread sidebar. Read resources with t3_thread_read. Files resolve on the thread's environment; use a workspace-relative or absolute path. clientRequestId makes retries idempotent.",
+    "Update metadata for a thread. Omit threadId to update this thread. Use action='rename' with title, action='regenerate_title', action='link_pull_request' with pullRequest, action='unlink_pull_request', action='add_resource' with resource {kind:'file'|'link'|'jira',target,label?}, or action='remove_resource' with resourceId. Register generated files and useful links with add_resource so they appear in the thread sidebar. Read resources with t3_thread_read. Files resolve on the thread's environment; use a workspace-relative or absolute path. clientRequestId makes retries idempotent.",
   parameters: ThreadMetadataMcpUpdateInput,
   success: ThreadMetadataMcpUpdateResult,
   failure: OrchestratorMcpFailure,

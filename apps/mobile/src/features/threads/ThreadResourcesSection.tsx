@@ -27,7 +27,7 @@ import { fileRoutePathSegments } from "../files/filePath";
 
 const decodeResource = Schema.decodeSync(ThreadResourceInput);
 
-const KIND_LABELS = { file: "File", link: "Link" } as const;
+const KIND_LABELS = { file: "File", link: "Link", jira: "Jira" } as const;
 
 // Targets come from the server, so a forked or compromised host could send intent:// or app schemes.
 function webUrl(target: string) {
@@ -57,7 +57,8 @@ export function ThreadResourcesSection({
   );
   const canReadFiles = useEnvironmentScope(thread?.environmentId ?? null, AuthFilesystemReadScope);
   const update = useAtomCommand(threadEnvironment.updateMetadata, { reportFailure: true });
-  const resources = detail?.projection.thread.resources ?? [];
+  const resources =
+    detail?.projection.thread.resources?.filter((resource) => !resource.dismissed) ?? [];
   if (
     thread === null ||
     runtime?.serverConfig?.environment.capabilities.threadResources !== true ||

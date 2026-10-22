@@ -340,3 +340,18 @@ describe("server model preferences", () => {
     expect(decodeServerSettingsPatch(input)).toEqual(input);
   });
 });
+
+describe("Jira link settings", () => {
+  it("drops an invalid saved value instead of failing the whole settings file", () => {
+    const projectId = ProjectId.make("project:jira");
+    const decoded = decodeServerSettings({
+      jiraLinks: { baseUrl: "jira.example", projectKeys: ["app"] },
+      projectSettingsOverrides: { [projectId]: { jiraLinks: { baseUrl: "?", projectKeys: [] } } },
+    });
+    expect(decoded.jiraLinks).toBeNull();
+    expect(decoded.projectSettingsOverrides[projectId]?.jiraLinks).toBeUndefined();
+    expect(() =>
+      decodeServerSettingsPatch({ jiraLinks: { baseUrl: "jira.example", projectKeys: [] } }),
+    ).toThrow();
+  });
+});

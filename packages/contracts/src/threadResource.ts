@@ -33,6 +33,22 @@ const HttpUrl = ResourceTarget.check(
   }),
 );
 
+export const JiraLinkSettings = Schema.Struct({
+  baseUrl: HttpUrl.check(
+    Schema.makeFilter((value) => {
+      const url = new URL(value);
+      return (
+        (url.search === "" && url.hash === "") ||
+        "Jira base URL must not include a query or fragment."
+      );
+    }),
+  ),
+  projectKeys: Schema.Array(
+    TrimmedNonEmptyString.check(Schema.isPattern(/^[A-Z][A-Z0-9_]*$/)),
+  ).check(Schema.isMaxLength(100)),
+});
+export type JiraLinkSettings = typeof JiraLinkSettings.Type;
+
 export const ThreadResourceInput = Schema.Union([
   Schema.Struct({
     kind: Schema.Literal("file"),
@@ -45,25 +61,26 @@ export const ThreadResourceInput = Schema.Union([
     label: Schema.optional(TrimmedNonEmptyString.check(Schema.isMaxLength(512))),
   }),
   Schema.Struct({
-    kind: Schema.Literal("link"),
+    kind: Schema.Literals(["link", "jira"]),
     target: HttpUrl,
     label: Schema.optional(TrimmedNonEmptyString.check(Schema.isMaxLength(512))),
   }),
 ]);
 export type ThreadResourceInput = typeof ThreadResourceInput.Type;
 
-const ResourceSource = Schema.Literals(["manual", "agent"]);
+const ResourceSource = Schema.Literals(["manual", "agent", "detected"]);
 export const ThreadResourceId = TrimmedNonEmptyString.check(
   Schema.isMaxLength(MAX_RESOURCE_TARGET_LENGTH + 8),
 );
 
 export const ThreadResource = Schema.Struct({
   id: ThreadResourceId,
-  kind: Schema.Literals(["file", "link"]),
+  kind: Schema.Literals(["file", "link", "jira"]),
   target: ResourceTarget,
   label: Schema.optional(TrimmedNonEmptyString.check(Schema.isMaxLength(512))),
   source: ResourceSource,
   addedAt: IsoDateTime,
+  dismissed: Schema.optional(Schema.Boolean),
 });
 export type ThreadResource = typeof ThreadResource.Type;
 

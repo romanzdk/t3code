@@ -145,7 +145,7 @@ function resultFromThread(input: {
             startedAt: DateTime.formatIso(input.thread.titleRegeneration.startedAt),
           },
     linkedPullRequest: input.thread.linkedPullRequest ?? null,
-    resources: input.thread.resources ?? [],
+    resources: input.thread.resources?.filter((resource) => !resource.dismissed) ?? [],
     updatedAt: DateTime.formatIso(input.thread.updatedAt),
   };
 }

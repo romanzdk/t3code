@@ -7,7 +7,7 @@ import {
 } from "@t3tools/contracts";
 import { useAtomValue } from "@effect/atom-react";
 import * as Schema from "effect/Schema";
-import { ArrowUpRightIcon, FileIcon, LinkIcon, PlusIcon, XIcon } from "lucide-react";
+import { ArrowUpRightIcon, FileIcon, LinkIcon, PlusIcon, TicketIcon, XIcon } from "lucide-react";
 import { useState, type FormEvent, type MouseEvent } from "react";
 
 import { useOpenLink } from "../../browser/useOpenLink";
@@ -64,7 +64,7 @@ function ThreadResources({
   const canReadFiles = useEnvironmentScope(threadRef.environmentId, AuthFilesystemReadScope);
   const update = useAtomCommand(threadEnvironment.updateMetadata);
   const openLink = useOpenLink(threadRef);
-  const visible = resources ?? NO_RESOURCES;
+  const visible = (resources ?? NO_RESOURCES).filter((resource) => !resource.dismissed);
 
   async function save(event: FormEvent) {
     event.preventDefault();
@@ -116,6 +116,7 @@ function ThreadResources({
   }
 
   const groups = [
+    { kind: "jira", title: "Tickets", icon: TicketIcon },
     { kind: "file", title: "Files & artifacts", icon: FileIcon },
     { kind: "link", title: "Links", icon: LinkIcon },
   ] as const;
@@ -280,7 +281,9 @@ function ThreadResources({
                   onChange={(event) => setTarget(event.target.value)}
                   required
                   autoCapitalize="none"
-                  placeholder={kind === "file" ? "reports/result.html" : "https://example.com/docs"}
+                  placeholder={
+                    kind === "file" ? "reports/result.html" : "https://example.com/browse/PROJ-123"
+                  }
                 />
               </label>
               {kind === "file" ? (
@@ -294,7 +297,7 @@ function ThreadResources({
                   value={label}
                   maxLength={512}
                   onChange={(event) => setLabel(event.target.value)}
-                  placeholder="Report, design notes…"
+                  placeholder="Report, design notes, ticket…"
                 />
               </label>
               {error ? (

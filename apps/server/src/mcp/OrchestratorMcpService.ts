@@ -907,7 +907,7 @@ function threadDetail(
     interactionMode: projection.thread.interactionMode,
     linkedPullRequest: projection.thread.linkedPullRequest ?? null,
     pullRequests: threadPullRequests(projection.thread.pullRequests),
-    resources: projection.thread.resources ?? [],
+    resources: projection.thread.resources?.filter((resource) => !resource.dismissed) ?? [],
     titleRegeneration:
       projection.thread.titleRegeneration === undefined ||
       projection.thread.titleRegeneration === null

@@ -128,6 +128,7 @@ export const ExecutionEnvironmentCapabilities = Schema.Struct({
   threadStop: Schema.optionalKey(Schema.Boolean),
   threadPullRequests: Schema.optionalKey(Schema.Boolean),
   threadResources: Schema.optionalKey(Schema.Boolean),
+  jiraTicketLinks: Schema.optionalKey(Schema.Boolean),
   threadPullRequestWatch: Schema.optionalKey(Schema.Boolean),
   pullRequestStackActions: Schema.optionalKey(Schema.Boolean),
   serverSelfUpdate: Schema.optionalKey(ServerSelfUpdateCapability),

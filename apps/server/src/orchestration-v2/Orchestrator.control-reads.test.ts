@@ -1,4 +1,5 @@
 import { assert, it } from "@effect/vitest";
+import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import {
   CommandId,
   MessageId,
@@ -19,6 +20,7 @@ import {
   TurnItemId,
 } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Result from "effect/Result";
@@ -26,6 +28,7 @@ import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
 import * as SqlClient from "effect/sql/SqlClient";
 import * as SqlitePersistence from "../persistence/Sqlite.ts";
+import * as ServerSettings from "../serverSettings.ts";
 import { CodexProviderCapabilitiesV2 } from "./Adapters/CodexAdapterV2.ts";
 import * as DelegatedTaskQuestionReactor from "./DelegatedTaskQuestionReactor.ts";
 import * as EffectOutbox from "./EffectOutbox.ts";
@@ -36,6 +39,7 @@ import * as ProjectionStore from "./ProjectionStore.ts";
 import * as ProjectionMaintenance from "./ProjectionMaintenance.ts";
 import * as ProviderAdapterRegistry from "./ProviderAdapterRegistry.ts";
 import * as ProviderReplayHarness from "./testkit/ProviderReplayHarness.ts";
+import * as ThreadResourceDiscovery from "./ThreadResourceDiscovery.ts";
 import type * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
 
 const instanceId = ProviderInstanceId.make("codex");
@@ -145,6 +149,130 @@ it.effect("persists thread resources across later metadata writes and projection
     }).pipe(Effect.provide(ProjectionMaintenance.layer.pipe(Layer.provide(EventStore.layer))));
     assert.isTrue(rebuilt.valid);
     assert.deepEqual((yield* projections.getThread(threadId)).resources, resources);
+  }).pipe(Effect.provide(layerTest)),
+);
+
+it.effect(
+  "discovers saved messages at startup and when Jira settings change without shell message text",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const orchestrator = yield* Orchestrator.OrchestratorV2;
+        const settings = yield* ServerSettings.ServerSettingsService;
+        const threadId = ThreadId.make("thread:resource-rescan");
+        yield* orchestrator.dispatch({
+          type: "thread.create",
+          commandId: CommandId.make("create-resource-rescan"),
+          threadId,
+          projectId: ProjectId.make("project:resource-rescan"),
+          title: "Investigate",
+          modelSelection,
+          runtimeMode: "full-access",
+          interactionMode: "default",
+          branch: null,
+          worktreePath: null,
+          createdBy: "user",
+          creationSource: "web",
+        });
+        yield* orchestrator.dispatch({
+          type: "message.dispatch",
+          commandId: CommandId.make("save-resource-rescan-message"),
+          threadId,
+          messageId: MessageId.make("resource-rescan-message"),
+          text: "See APP-123 and https://jira.example/browse/OPS-5",
+          attachments: [],
+          dispatchMode: { type: "defer_start" },
+          createdBy: "user",
+          creationSource: "web",
+        });
+        assert.isNull((yield* orchestrator.getThreadShell(threadId))?.latestVisibleMessage);
+        const changed = yield* Deferred.make<void>();
+        const observed = yield* Deferred.make<void>();
+        const scanning = yield* Deferred.make<void>();
+        let settingsReads = 0;
+        const discovery = yield* ThreadResourceDiscovery.make.pipe(
+          Effect.provideService(ServerSettings.ServerSettingsService, {
+            ...settings,
+            // The first read seeds the change stream; the second one is the startup scan itself.
+            getSettings: settings.getSettings.pipe(
+              Effect.tap(() =>
+                ++settingsReads === 2 ? Deferred.succeed(scanning, undefined) : Effect.void,
+              ),
+            ),
+            streamChanges: Stream.fromEffect(
+              Deferred.await(changed).pipe(Effect.flatMap(() => settings.getSettings)),
+            ).pipe(Stream.ensuring(Deferred.succeed(observed, undefined))),
+          }),
+        );
+        const labels = Effect.map(orchestrator.getThreadProjection(threadId), (projection) =>
+          projection.thread.resources?.map((resource) => resource.label),
+        );
+        yield* discovery.start();
+        yield* Deferred.await(scanning);
+        yield* discovery.drain;
+        assert.deepEqual(yield* labels, ["OPS-5"]);
+        yield* settings.updateSettings({
+          jiraLinks: { baseUrl: "https://jira.example", projectKeys: ["APP"] },
+        });
+        yield* Deferred.succeed(changed, undefined);
+        yield* Deferred.await(observed);
+        yield* discovery.drain;
+        assert.deepEqual(yield* labels, ["OPS-5", "APP-123"]);
+      }),
+    ).pipe(Effect.provide([layerTest, ServerSettings.layerTest(), NodeCrypto.layer])),
+);
+
+it.effect("keeps removed tickets dismissed and does not reorder the sidebar on detection", () =>
+  Effect.gen(function* () {
+    const orchestrator = yield* Orchestrator.OrchestratorV2;
+    const projections = yield* ProjectionStore.ProjectionStoreV2;
+    const threadId = ThreadId.make("thread:ticket-resources");
+    yield* orchestrator.dispatch({
+      type: "thread.create",
+      commandId: CommandId.make("create-ticket-resources"),
+      threadId,
+      projectId: ProjectId.make("project:ticket-resources"),
+      title: "Tickets",
+      modelSelection,
+      runtimeMode: "full-access",
+      interactionMode: "default",
+      branch: null,
+      worktreePath: null,
+      createdBy: "user",
+      creationSource: "web",
+    });
+    const addTicket = {
+      type: "thread.metadata.update" as const,
+      threadId,
+      resource: {
+        type: "add" as const,
+        source: "detected" as const,
+        resource: { kind: "jira" as const, target: "https://jira.example/browse/APP-12" },
+      },
+    };
+    const updatedBeforeDetection = (yield* projections.getThread(threadId)).updatedAt;
+    yield* TestClock.adjust("1 minute");
+    yield* orchestrator.dispatch({ ...addTicket, commandId: CommandId.make("add-ticket") });
+    assert.deepEqual((yield* projections.getThread(threadId)).updatedAt, updatedBeforeDetection);
+    yield* orchestrator.dispatch({
+      type: "thread.metadata.update",
+      commandId: CommandId.make("remove-ticket"),
+      threadId,
+      resource: { type: "remove", resourceId: "url:https://jira.example/browse/APP-12" },
+    });
+    yield* orchestrator.dispatch({
+      ...addTicket,
+      commandId: CommandId.make("detect-ticket-again"),
+    });
+    yield* orchestrator.dispatch({
+      type: "thread.metadata.update",
+      commandId: CommandId.make("rename-ticket-resources"),
+      threadId,
+      title: "Renamed",
+    });
+    const resources = (yield* projections.getThread(threadId)).resources;
+    assert.equal(resources?.length, 1);
+    assert.equal(resources?.[0]?.dismissed, true);
   }).pipe(Effect.provide(layerTest)),
 );
 

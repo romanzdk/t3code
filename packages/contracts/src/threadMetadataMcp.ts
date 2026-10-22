@@ -88,7 +88,7 @@ export const ThreadMetadataMcpUpdateInput = Schema.Struct({
   action: ThreadMetadataMcpAction,
   resource: Schema.optional(ThreadResourceInput).annotate({
     description:
-      "File, artifact, or web link to show in the thread sidebar. Required for add_resource.",
+      "File, artifact, web link, or Jira ticket to show in the thread sidebar. Required for add_resource.",
   }),
   resourceId: Schema.optional(ThreadResourceId).annotate({
     description: "Resource id from t3_thread_read. Required for remove_resource.",

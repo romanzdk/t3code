@@ -178,6 +178,16 @@ to save its outputs as thread resources. Saved resources follow the thread acros
 
 On mobile, resources appear in the Git overview. Touch and hold a resource to copy or remove it.
 
+Jira ticket URLs in messages, thread titles, branches, and linked PR titles are detected automatically.
+To recognize bare keys such as `APP-123`, set the Jira base URL and allowed project keys in
+**Settings → Source Control → Issue links** on web and desktop, or
+**Settings → Thread behavior → Jira ticket links** on mobile. Once a base URL is set, only
+ticket links on that site are detected. Select a project in settings to give it its own mapping.
+Tickets open on Jira; their live status is not fetched.
+
+Removing a ticket keeps automatic detection from adding it again. Add its URL explicitly to restore it.
+Disabling key detection still allows full Jira URLs to be recognized.
+
 ## Link a pull request
 
 The server finds the PR for each unsettled thread's saved branch, even when your

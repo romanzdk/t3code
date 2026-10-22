@@ -51,6 +51,7 @@ import { GitHubAccountSettings } from "./GitHubAccountSettings";
 import { GitHubTokenSettings } from "./GitHubTokenSettings";
 import { RedactedSensitiveText } from "./RedactedSensitiveText";
 import { SourceControlWritingSettingsSection } from "./SourceControlWritingSettings";
+import { JiraLinkSettingsSection } from "./JiraLinkSettings";
 import {
   PolicyTooltip,
   SettingResetButton,
@@ -641,6 +642,7 @@ export function SourceControlSettingsPanel() {
       )}
 
       <SourceControlWritingSettingsSection />
+      <JiraLinkSettingsSection />
     </SettingsPageContainer>
   );
 }

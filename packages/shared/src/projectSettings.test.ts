@@ -34,6 +34,20 @@ describe("resolveSendEnvMode", () => {
 });
 
 describe("resolveProjectSettings", () => {
+  it("keeps Jira mappings scoped to their project and supports disabling inherited detection", () => {
+    const environmentJira = { baseUrl: "https://jira.example", projectKeys: ["APP"] };
+    const projectJira = { baseUrl: "https://other.example/jira", projectKeys: ["OPS"] };
+    const settings = applyServerSettingsPatch(DEFAULT_SERVER_SETTINGS, {
+      jiraLinks: environmentJira,
+      projectSettingsOverrides: {
+        [projectId]: { jiraLinks: projectJira },
+        [otherProjectId]: { jiraLinks: null },
+      },
+    });
+    expect(resolveProjectSettings(settings, projectId).settings.jiraLinks).toEqual(projectJira);
+    expect(resolveProjectSettings(settings, otherProjectId).settings.jiraLinks).toBeNull();
+    expect(resolveProjectSettings(settings, null).settings.jiraLinks).toEqual(environmentJira);
+  });
   it("ignores an override left undefined by a forward-compatible decode", () => {
     const resolved = resolveProjectSettings(
       {

@@ -46,6 +46,7 @@ import {
   ProviderDriverKind,
 } from "./providerInstance.ts";
 import { PullRequestMergeMethod } from "./pullRequest.ts";
+import { JiraLinkSettings } from "./threadResource.ts";
 
 export const TimestampFormat = Schema.Literals(["locale", "12-hour", "24-hour"]);
 export type TimestampFormat = typeof TimestampFormat.Type;
@@ -973,6 +974,7 @@ export const WorktreeCleanup = Schema.NullOr(
 export type WorktreeCleanup = typeof WorktreeCleanup.Type;
 
 export const PROJECT_SCOPED_SERVER_SETTING_KEYS = [
+  "jiraLinks",
   "worktreeCleanup",
   "defaultModelSelection",
   "defaultRuntimeMode",
@@ -1016,6 +1018,7 @@ export type ProjectProviderInstanceOverride = typeof ProjectProviderInstanceOver
  * settings.json shape but overrides field by field, per `ProviderInstanceId`.
  */
 export const ProjectSettingsOverrides = Schema.Struct({
+  jiraLinks: ForwardCompatibleOptional(Schema.NullOr(JiraLinkSettings)),
   worktreeCleanup: Schema.optionalKey(WorktreeCleanup),
   defaultModelSelection: Schema.optionalKey(Schema.NullOr(ModelSelection)),
   defaultRuntimeMode: Schema.optionalKey(RuntimeMode),
@@ -1061,6 +1064,7 @@ const NULLABLE_PROJECT_SETTINGS_OVERRIDES: ReadonlySet<ProjectScopedServerSettin
     [K in ProjectScopedServerSettingKey]: null extends ProjectSettingsOverrides[K] ? K : never;
   }[ProjectScopedServerSettingKey]
 >([
+  "jiraLinks",
   "defaultModelSelection",
   "sourceControlWriterModelSelection",
   "reviewGuideModelSelection",
@@ -1133,6 +1137,9 @@ export const StorageCleanupSettings = Schema.Struct({
 export type StorageCleanupSettings = typeof StorageCleanupSettings.Type;
 
 export const ServerSettings = Schema.Struct({
+  jiraLinks: ForwardCompatibleNullable(JiraLinkSettings).pipe(
+    Schema.withDecodingDefault(Effect.succeed(null)),
+  ),
   // Null means no client has migrated this preference yet; an empty value is
   // authoritative so another device cannot resurrect cleared preferences.
   favorites: Schema.NullOr(ModelFavorites).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
@@ -1444,6 +1451,7 @@ const ModelSelectionPatch = Schema.Struct({
 });
 
 export const ServerSettingsPatch = Schema.Struct({
+  jiraLinks: Schema.optionalKey(Schema.NullOr(JiraLinkSettings)),
   setModelFavorites: Schema.optionalKey(
     Schema.Array(Schema.Struct({ ...ModelFavorite.fields, favorite: Schema.Boolean })),
   ),

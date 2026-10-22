@@ -14,6 +14,7 @@ import { supportsSharedSettingsSync } from "@t3tools/client-runtime/state/shared
 import { AppText as Text } from "../../components/ui/AppText";
 import { mobilePreferencesAtom, updateMobilePreferencesAtom } from "../../state/preferences";
 import { SettingsSection } from "./components/SettingsSection";
+import { JiraLinkSettingsSection } from "./components/JiraLinkSettings";
 import { SettingsProjectOverridesSection } from "./components/SettingsProjectOverridesSection";
 import { SettingsSwitchRow } from "./components/SettingsSwitchRow";
 import { SettingsScreen } from "./components/SettingsScreen";
@@ -40,6 +41,8 @@ export function SettingsThreadsRouteScreen() {
       <SettingsEnvironmentFilterHeader />
       <SettingsScreen title="Thread behavior" trailing={<AndroidSettingsEnvironmentFilter />}>
         <ScrollView
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
           contentInsetAdjustmentBehavior="automatic"
           showsVerticalScrollIndicator={false}
           className="flex-1"
@@ -47,6 +50,7 @@ export function SettingsThreadsRouteScreen() {
           contentContainerStyle={{ paddingBottom: Math.max(insets.bottom, 18) + 18 }}
         >
           <AutoSettleSettingsRows />
+          <JiraLinkSettingsSection />
           <BetaSettingsSection />
           <LegacySettingsSection />
         </ScrollView>

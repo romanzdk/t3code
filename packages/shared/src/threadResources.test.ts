@@ -1,6 +1,7 @@
+import { MAX_THREAD_RESOURCES } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
-import { threadResourceId, updateThreadResources } from "./threadResources.ts";
+import { detectJiraResources, threadResourceId, updateThreadResources } from "./threadResources.ts";
 
 const addedAt = "2026-10-21T12:00:00.000Z";
 
@@ -49,6 +50,81 @@ describe("thread resources", () => {
     ).toEqual(["https://example.com/docs"]);
   });
 
+  it("deduplicates ticket links and preserves explicit labels during detection", () => {
+    const resource = { kind: "link" as const, target: "https://jira.example/browse/APP-12" };
+    const first = updateThreadResources(
+      [],
+      {
+        type: "add",
+        source: "manual",
+        resource: { ...resource, label: "Investigate latency" },
+      },
+      addedAt,
+    );
+    const second = updateThreadResources(
+      first,
+      {
+        type: "add",
+        source: "detected",
+        resource: { ...resource, target: `${resource.target}?focusedCommentId=5#comment` },
+      },
+      addedAt,
+    );
+    expect(second).toEqual(first);
+    expect(second[0]).toMatchObject({ kind: "jira", label: "Investigate latency" });
+  });
+
+  it("keeps dismissed tickets hidden when detected again and permits explicit restoration", () => {
+    const resource = { kind: "jira" as const, target: "https://jira.example/browse/APP-12" };
+    const added = updateThreadResources([], { type: "add", source: "detected", resource }, addedAt);
+    const removed = updateThreadResources(
+      added,
+      { type: "remove", resourceId: threadResourceId(resource) },
+      addedAt,
+    );
+    expect(
+      updateThreadResources(removed, { type: "add", source: "detected", resource }, addedAt)[0]
+        ?.dismissed,
+    ).toBe(true);
+    expect(
+      updateThreadResources(removed, { type: "add", source: "manual", resource }, addedAt)[0]
+        ?.dismissed,
+    ).toBeUndefined();
+  });
+
+  it("counts dismissed tickets toward the cap and drops the oldest to make room", () => {
+    let resources = updateThreadResources(
+      [],
+      {
+        type: "add",
+        source: "detected",
+        resource: { kind: "jira", target: "https://j.example/browse/A-0" },
+      },
+      addedAt,
+    );
+    resources = updateThreadResources(
+      resources,
+      { type: "remove", resourceId: "url:https://j.example/browse/A-0" },
+      addedAt,
+    );
+    for (let index = 1; index < MAX_THREAD_RESOURCES; index++) {
+      resources = updateThreadResources(
+        resources,
+        { type: "add", source: "manual", resource: { kind: "file", target: `out/${index}.txt` } },
+        addedAt,
+      );
+    }
+    expect(resources).toHaveLength(MAX_THREAD_RESOURCES);
+    const next = updateThreadResources(
+      resources,
+      { type: "add", source: "manual", resource: { kind: "file", target: "out/new.txt" } },
+      addedAt,
+    );
+    expect(next).toHaveLength(MAX_THREAD_RESOURCES);
+    expect(next.some((entry) => entry.dismissed)).toBe(false);
+    expect(next.at(-1)?.target).toBe("out/new.txt");
+  });
+
   it("preserves other resources when additions use an older client snapshot", () => {
     const file = { kind: "file" as const, target: "reports/result.html" };
     const resources = updateThreadResources(
@@ -69,5 +145,49 @@ describe("thread resources", () => {
       "reports/result.html",
       "https://example.com/docs#usage",
     ]);
+  });
+});
+
+describe("Jira detection", () => {
+  it("finds full Cloud and self-hosted URLs without configuration", () => {
+    expect(
+      detectJiraResources(
+        "See [ticket](https://team.atlassian.net/browse/APP-12?x=1). Also https://jira.example/jira/browse/OPS-8#details",
+        null,
+      ),
+    ).toEqual([
+      { kind: "jira", target: "https://team.atlassian.net/browse/APP-12", label: "APP-12" },
+      { kind: "jira", target: "https://jira.example/jira/browse/OPS-8", label: "OPS-8" },
+    ]);
+  });
+
+  it("resolves only configured project keys in branch names and messages", () => {
+    expect(
+      detectJiraResources("fix/APP-12-latency; APP-12 and OTHER-5; APP-120", {
+        baseUrl: "https://jira.example/jira/",
+        projectKeys: ["APP"],
+      }),
+    ).toEqual([
+      { kind: "jira", target: "https://jira.example/jira/browse/APP-12", label: "APP-12" },
+      { kind: "jira", target: "https://jira.example/jira/browse/APP-120", label: "APP-120" },
+    ]);
+  });
+
+  it("trusts ticket URLs only on the configured Jira site", () => {
+    expect(
+      detectJiraResources(
+        "Fix login (https://jira.evil.example/browse/APP-42) see https://JIRA.example/jira/browse/APP-7",
+        { baseUrl: "https://jira.example/jira", projectKeys: [] },
+      ),
+    ).toEqual([{ kind: "jira", target: "https://jira.example/jira/browse/APP-7", label: "APP-7" }]);
+  });
+
+  it("ignores unconfigured bare keys, unsafe URLs, and ordinary web links", () => {
+    expect(
+      detectJiraResources(
+        "APP-12 https://user:secret@jira.example/browse/APP-12 https://example.com/docs",
+        null,
+      ),
+    ).toEqual([]);
   });
 });

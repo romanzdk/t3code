@@ -2674,8 +2674,10 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
         : undefined;
     if (
       addedResource !== undefined &&
-      (thread.resources?.length ?? 0) >= MAX_THREAD_RESOURCES &&
-      !thread.resources?.some((entry) => entry.id === threadResourceId(addedResource))
+      (thread.resources?.filter((entry) => !entry.dismissed).length ?? 0) >= MAX_THREAD_RESOURCES &&
+      !thread.resources?.some(
+        (entry) => entry.id === threadResourceId(addedResource) && !entry.dismissed,
+      )
     ) {
       return yield* new OrchestratorDispatchError({
         commandId: command.commandId,
@@ -2689,7 +2691,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
         : undefined;
     if (
       removedResourceId !== undefined &&
-      !thread.resources?.some((entry) => entry.id === removedResourceId)
+      !thread.resources?.some((entry) => entry.id === removedResourceId && !entry.dismissed)
     ) {
       return yield* new OrchestratorDispatchError({
         commandId: command.commandId,
@@ -3279,7 +3281,11 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
               : command.regenerateTitle === false || command.title !== undefined
                 ? { titleRegeneration: null }
                 : {}),
-            updatedAt: now,
+            // Background ticket detection must not reorder the sidebar as if the user acted.
+            updatedAt:
+              command.resource?.type === "add" && command.resource.source === "detected"
+                ? thread.updatedAt
+                : now,
           };
         }
         case "thread.pull-request.link":

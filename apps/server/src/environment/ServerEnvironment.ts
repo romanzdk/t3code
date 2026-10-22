@@ -252,6 +252,7 @@ export const make = Effect.gen(function* () {
       threadVisitedTracking: true,
       threadPullRequests: true,
       threadResources: true,
+      jiraTicketLinks: true,
       threadPullRequestWatch: true,
       pullRequestStackActions: true,
       threadPullRequestLinking: true,

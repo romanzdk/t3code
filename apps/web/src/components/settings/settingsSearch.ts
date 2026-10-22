@@ -836,6 +836,14 @@ export const SETTINGS_SEARCH_ITEMS = [
   },
   ...SOURCE_CONTROL_HOST_SEARCH_ITEMS,
   {
+    id: "jira-ticket-links",
+    title: "Jira ticket links",
+    to: "/settings/source-control",
+    searchTerms: ["jira issue ticket links artifacts resources project key base url"],
+    environmentOnly: true,
+    scope: "project-defaults",
+  },
+  {
     id: "source-control-writing-style",
     title: "Source control writing style",
     to: "/settings/source-control",

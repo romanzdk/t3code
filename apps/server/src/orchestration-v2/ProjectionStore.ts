@@ -369,6 +369,7 @@ export interface ProjectionTimelinePageOptions {
   readonly afterPosition?: number;
   readonly itemId?: TurnItemId;
   readonly view?: "messages" | "activity";
+  readonly fromEnd?: boolean;
   readonly limit: number;
 }
 export interface ProjectionTimelinePage {
@@ -5531,7 +5532,10 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
                       ))
                   : row.sourceItemId === options.itemId,
               );
-            const page = matching.slice(0, options.limit);
+            const page = matching.slice(
+              options.fromEnd ? Math.max(0, matching.length - options.limit) : 0,
+              options.fromEnd ? matching.length : options.limit,
+            );
             const items = yield* Effect.forEach(page, (row) =>
               Effect.gen(function* () {
                 if (row.synthetic !== undefined)
@@ -7280,7 +7284,10 @@ export const layerMemory: Layer.Layer<ProjectionStoreV2> = Layer.effect(
                 : row.sourceItemId === options.itemId,
             );
             return {
-              items: matching.slice(0, options.limit),
+              items: matching.slice(
+                options.fromEnd ? Math.max(0, matching.length - options.limit) : 0,
+                options.fromEnd ? matching.length : options.limit,
+              ),
               totalItems: projection.visibleTurnItems.length,
               hasMore: matching.length > options.limit,
             };

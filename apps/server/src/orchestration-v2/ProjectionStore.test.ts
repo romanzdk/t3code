@@ -4736,6 +4736,24 @@ it.layer(layerTest)("ProjectionStoreV2", (it) => {
       assert.deepEqual(forwardPage.items, targetAfterRollback.visibleTurnItems.slice(0, 2));
       assert.equal(forwardPage.totalItems, targetAfterRollback.visibleTurnItems.length);
       assert.isTrue(forwardPage.hasMore);
+      const latestPage = yield* projectionStore.getTimelinePage(targetThreadId, {
+        view: "messages",
+        fromEnd: true,
+        limit: 2,
+      });
+      assert.deepEqual(
+        latestPage.items,
+        targetAfterRollback.visibleTurnItems
+          .filter((row) =>
+            ["user_message", "assistant_message", "proposed_plan"].includes(row.item.type),
+          )
+          .slice(-2),
+      );
+      assert.isTrue(latestPage.hasMore);
+      assert.deepEqual(
+        (yield* projectionStore.getTimelinePage(targetThreadId, { fromEnd: true, limit: 0 })).items,
+        [],
+      );
       const followingPage = yield* projectionStore.getTimelinePage(targetThreadId, {
         view: "activity",
         limit: 10,
