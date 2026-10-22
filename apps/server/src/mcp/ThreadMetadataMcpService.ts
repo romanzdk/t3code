@@ -74,6 +74,20 @@ function metadataCommand(input: {
   readonly update: ThreadMetadataMcpUpdateInput;
 }): Extract<OrchestrationV2Command, { readonly type: "thread.metadata.update" }> {
   switch (input.update.action) {
+    case "add_resource":
+      return {
+        type: "thread.metadata.update",
+        commandId: input.commandId,
+        threadId: input.threadId,
+        resource: { type: "add", source: "agent", resource: input.update.resource! },
+      };
+    case "remove_resource":
+      return {
+        type: "thread.metadata.update",
+        commandId: input.commandId,
+        threadId: input.threadId,
+        resource: { type: "remove", resourceId: input.update.resourceId! },
+      };
     case "rename":
       return {
         type: "thread.metadata.update",
@@ -114,7 +128,7 @@ function resultFromThread(input: {
   readonly sequence: number;
   readonly thread: Pick<
     OrchestrationV2AppThread,
-    "id" | "title" | "titleRegeneration" | "linkedPullRequest" | "updatedAt"
+    "id" | "title" | "titleRegeneration" | "linkedPullRequest" | "resources" | "updatedAt"
   >;
 }): ThreadMetadataMcpUpdateResult {
   return {
@@ -131,6 +145,7 @@ function resultFromThread(input: {
             startedAt: DateTime.formatIso(input.thread.titleRegeneration.startedAt),
           },
     linkedPullRequest: input.thread.linkedPullRequest ?? null,
+    resources: input.thread.resources ?? [],
     updatedAt: DateTime.formatIso(input.thread.updatedAt),
   };
 }

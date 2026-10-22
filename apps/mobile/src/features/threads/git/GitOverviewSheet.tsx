@@ -50,6 +50,7 @@ import {
   useLinkedPullRequestLines,
 } from "../LinkedPullRequestList";
 import { useLinkedPullRequestActions } from "../useLinkedPullRequestActions";
+import { ThreadResourcesSection } from "../ThreadResourcesSection";
 
 const HEADER_SCROLL_EDGE_EFFECTS = nativeHeaderScrollEdgeEffects(Platform.OS, Platform.Version);
 
@@ -233,6 +234,7 @@ function GitOverviewSheetContent(props: GitOverviewSheetProps) {
     <ScrollView
       nestedScrollEnabled
       alwaysBounceVertical
+      automaticallyAdjustKeyboardInsets
       className="flex-1 android:bg-sheet-solid ios:bg-screen"
       contentInsetAdjustmentBehavior={Platform.OS === "ios" ? "automatic" : "never"}
       showsVerticalScrollIndicator={false}
@@ -334,6 +336,11 @@ function GitOverviewSheetContent(props: GitOverviewSheetProps) {
           </Text>
         </ListSection>
       ) : null}
+      <ThreadResourcesSection
+        thread={selectedThread}
+        runtime={selectedEnvironmentRuntime}
+        replace={!isInspector}
+      />
     </ScrollView>
   );
 

@@ -10,6 +10,7 @@ import {
   usageLimitBlockedRun,
 } from "@t3tools/shared/orchestrationV2ThreadError";
 import { threadPullRequestsOf } from "@t3tools/shared/threadPullRequests";
+import { threadResourceId, updateThreadResources } from "@t3tools/shared/threadResources";
 import {
   normalizeThreadPullRequestKey,
   visibleThreadPullRequests,
@@ -20,6 +21,7 @@ import {
   ORCHESTRATION_V2_WORKSPACE_PREPARATION_FAILURE_CODE,
   type ChatAttachment,
   CommandId,
+  MAX_THREAD_RESOURCES,
   isOrchestrationV2WorkActive,
   isProviderNativeSubagentThread,
   MessageId,
@@ -2666,6 +2668,35 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
         cause: `Thread ${command.threadId} is deleted.`,
       });
     }
+    const addedResource =
+      command.type === "thread.metadata.update" && command.resource?.type === "add"
+        ? command.resource.resource
+        : undefined;
+    if (
+      addedResource !== undefined &&
+      (thread.resources?.length ?? 0) >= MAX_THREAD_RESOURCES &&
+      !thread.resources?.some((entry) => entry.id === threadResourceId(addedResource))
+    ) {
+      return yield* new OrchestratorDispatchError({
+        commandId: command.commandId,
+        commandType: command.type,
+        cause: `A thread can keep up to ${MAX_THREAD_RESOURCES} resources. Remove a file or link before adding another.`,
+      });
+    }
+    const removedResourceId =
+      command.type === "thread.metadata.update" && command.resource?.type === "remove"
+        ? command.resource.resourceId
+        : undefined;
+    if (
+      removedResourceId !== undefined &&
+      !thread.resources?.some((entry) => entry.id === removedResourceId)
+    ) {
+      return yield* new OrchestratorDispatchError({
+        commandId: command.commandId,
+        commandType: command.type,
+        cause: `Thread ${command.threadId} has no resource ${removedResourceId}. Use a resource id from t3_thread_read.`,
+      });
+    }
     if (
       command.type === "thread.pull-request.watch" &&
       command.watching &&
@@ -3187,6 +3218,15 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
                   };
           return {
             ...thread,
+            ...(command.resource === undefined
+              ? {}
+              : {
+                  resources: updateThreadResources(
+                    thread.resources,
+                    command.resource,
+                    DateTime.formatIso(now),
+                  ),
+                }),
             ...(command.title === undefined ? {} : { title: command.title }),
             ...(command.limitRecovery === undefined ? {} : { limitRecovery }),
             ...(command.limitRecovery !== undefined &&

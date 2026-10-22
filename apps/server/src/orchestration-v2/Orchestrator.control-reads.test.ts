@@ -30,8 +30,10 @@ import { CodexProviderCapabilitiesV2 } from "./Adapters/CodexAdapterV2.ts";
 import * as DelegatedTaskQuestionReactor from "./DelegatedTaskQuestionReactor.ts";
 import * as EffectOutbox from "./EffectOutbox.ts";
 import * as EventSink from "./EventSink.ts";
+import * as EventStore from "./EventStore.ts";
 import * as Orchestrator from "./Orchestrator.ts";
 import * as ProjectionStore from "./ProjectionStore.ts";
+import * as ProjectionMaintenance from "./ProjectionMaintenance.ts";
 import * as ProviderAdapterRegistry from "./ProviderAdapterRegistry.ts";
 import * as ProviderReplayHarness from "./testkit/ProviderReplayHarness.ts";
 import type * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
@@ -55,6 +57,95 @@ const layerTest = Layer.mergeAll(
     ProviderAdapterRegistry.layerFromAdapters([adapter]),
     { databaseLayer: layerDatabase, runEffectWorker: false },
   ),
+);
+
+it.effect("persists thread resources across later metadata writes and projection rebuilds", () =>
+  Effect.gen(function* () {
+    const orchestrator = yield* Orchestrator.OrchestratorV2;
+    const projections = yield* ProjectionStore.ProjectionStoreV2;
+    const sql = yield* SqlClient.SqlClient;
+    const threadId = ThreadId.make("thread:resources");
+    yield* orchestrator.dispatch({
+      type: "thread.create",
+      commandId: CommandId.make("create-resources"),
+      threadId,
+      projectId: ProjectId.make("project:resources"),
+      title: "Resources",
+      modelSelection,
+      runtimeMode: "full-access",
+      interactionMode: "default",
+      branch: null,
+      worktreePath: null,
+      createdBy: "user",
+      creationSource: "web",
+    });
+    yield* orchestrator.dispatch({
+      type: "thread.metadata.update",
+      commandId: CommandId.make("add-file"),
+      threadId,
+      resource: {
+        type: "add",
+        source: "agent",
+        resource: { kind: "file", target: "/tmp/report.html" },
+      },
+    });
+    yield* orchestrator.dispatch({
+      type: "thread.metadata.update",
+      commandId: CommandId.make("add-link"),
+      threadId,
+      resource: {
+        type: "add",
+        source: "manual",
+        resource: { kind: "link", target: "https://example.com/docs" },
+      },
+    });
+    const unknownRemoval = yield* orchestrator
+      .dispatch({
+        type: "thread.metadata.update",
+        commandId: CommandId.make("remove-unknown"),
+        threadId,
+        resource: { type: "remove", resourceId: "/tmp/report.html" },
+      })
+      .pipe(Effect.result);
+    assert.isTrue(Result.isFailure(unknownRemoval));
+    yield* orchestrator.dispatch({
+      type: "thread.metadata.update",
+      commandId: CommandId.make("remove-link"),
+      threadId,
+      resource: { type: "remove", resourceId: "url:https://example.com/docs" },
+    });
+    yield* orchestrator.dispatch({
+      type: "thread.metadata.update",
+      commandId: CommandId.make("rename-resources"),
+      threadId,
+      title: "Renamed",
+    });
+    const resources = (yield* projections.getThread(threadId)).resources;
+    assert.deepEqual(
+      resources?.map((resource) => resource.target),
+      ["/tmp/report.html"],
+    );
+    assert.notProperty(yield* projections.getThreadShell(threadId), "resources");
+    const rows = yield* sql<{
+      payload_json: string;
+    }>`SELECT payload_json FROM orchestration_v2_projection_threads WHERE thread_id = ${threadId}`;
+    assert.deepEqual(JSON.parse(rows[0]!.payload_json).resources, resources);
+    const events = yield* Effect.gen(function* () {
+      const store = yield* EventStore.EventStoreV2;
+      return yield* Stream.runCollect(
+        store.read({ threadId, eventType: "thread.metadata-updated" }),
+      );
+    }).pipe(Effect.provide(EventStore.layer));
+    const last = events[events.length - 1]?.event;
+    assert.equal(last?.type, "thread.metadata-updated");
+    if (last?.type === "thread.metadata-updated")
+      assert.deepEqual(last.payload.resources, resources);
+    const rebuilt = yield* Effect.gen(function* () {
+      return yield* (yield* ProjectionMaintenance.ProjectionMaintenanceV2).rebuild;
+    }).pipe(Effect.provide(ProjectionMaintenance.layer.pipe(Layer.provide(EventStore.layer))));
+    assert.isTrue(rebuilt.valid);
+    assert.deepEqual((yield* projections.getThread(threadId)).resources, resources);
+  }).pipe(Effect.provide(layerTest)),
 );
 
 it.effect("marks a never-visited thread's first completion unread", () =>

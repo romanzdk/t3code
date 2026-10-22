@@ -10,6 +10,7 @@ import {
 } from "./baseSchemas.ts";
 import { ThreadLinkedPullRequest } from "./threadPullRequest.ts";
 import { ThreadTitleRegeneration } from "./threadTitle.ts";
+import { ThreadResource, ThreadResourceId, ThreadResourceInput } from "./threadResource.ts";
 
 function hasOnlyPairedSurrogates(value: string): boolean {
   for (let index = 0; index < value.length; index += 1) {
@@ -63,9 +64,11 @@ export const ThreadMetadataMcpAction = Schema.Literals([
   "regenerate_title",
   "link_pull_request",
   "unlink_pull_request",
+  "add_resource",
+  "remove_resource",
 ]).annotate({
   description:
-    "Metadata mutation: rename, regenerate_title, link_pull_request, or unlink_pull_request.",
+    "Metadata mutation: rename, regenerate_title, link_pull_request, unlink_pull_request, add_resource, or remove_resource.",
 });
 export type ThreadMetadataMcpAction = typeof ThreadMetadataMcpAction.Type;
 
@@ -83,6 +86,13 @@ export const ThreadMetadataMcpUpdateInput = Schema.Struct({
     description: "Thread to update. Omit to update the calling thread.",
   }),
   action: ThreadMetadataMcpAction,
+  resource: Schema.optional(ThreadResourceInput).annotate({
+    description:
+      "File, artifact, or web link to show in the thread sidebar. Required for add_resource.",
+  }),
+  resourceId: Schema.optional(ThreadResourceId).annotate({
+    description: "Resource id from t3_thread_read. Required for remove_resource.",
+  }),
   title: Schema.optional(ThreadMetadataTitle),
   pullRequest: Schema.optional(ThreadMetadataMcpPullRequest).annotate({
     description: "Pull request to link. Required only when action is link_pull_request.",
@@ -90,6 +100,25 @@ export const ThreadMetadataMcpUpdateInput = Schema.Struct({
   clientRequestId: Schema.optional(ThreadMetadataClientRequestId),
 }).check(
   Schema.makeFilter((input) => {
+    if (input.action === "add_resource") {
+      return input.resource !== undefined &&
+        input.resourceId === undefined &&
+        input.title === undefined &&
+        input.pullRequest === undefined
+        ? true
+        : "add_resource requires resource and does not accept resourceId, title, or pullRequest.";
+    }
+    if (input.action === "remove_resource") {
+      return input.resourceId !== undefined &&
+        input.resource === undefined &&
+        input.title === undefined &&
+        input.pullRequest === undefined
+        ? true
+        : "remove_resource requires resourceId and does not accept resource, title, or pullRequest.";
+    }
+    if (input.resource !== undefined || input.resourceId !== undefined) {
+      return `${input.action} does not accept resource or resourceId.`;
+    }
     switch (input.action) {
       case "rename":
         return input.title !== undefined && input.pullRequest === undefined
@@ -117,6 +146,7 @@ export const ThreadMetadataMcpUpdateResult = Schema.Struct({
   title: Schema.String,
   titleRegeneration: Schema.NullOr(ThreadTitleRegeneration),
   linkedPullRequest: Schema.NullOr(ThreadLinkedPullRequest),
+  resources: Schema.optional(Schema.Array(ThreadResource)),
   updatedAt: IsoDateTime,
 });
 export type ThreadMetadataMcpUpdateResult = typeof ThreadMetadataMcpUpdateResult.Type;

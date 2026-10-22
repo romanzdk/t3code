@@ -169,6 +169,15 @@ rules to connected environments that support shared settings. Offline environmen
 and older servers keep their previous values. Changing a rule does not reopen
 already settled threads.
 
+## Keep files and links with a thread
+
+Use **Resources** in thread details to save generated files, reports, and reference links.
+File paths can be relative to the thread's workspace or absolute paths on its machine.
+Open a saved file to preview it, or open a link in your browser. You can also ask the agent
+to save its outputs as thread resources. Saved resources follow the thread across connected clients.
+
+On mobile, resources appear in the Git overview. Touch and hold a resource to copy or remove it.
+
 ## Link a pull request
 
 The server finds the PR for each unsettled thread's saved branch, even when your
