@@ -26,6 +26,46 @@ const divider = marker("pinned-divider");
 const settledHeader = marker("settled-header");
 const stationary = { x: 0, y: 0, scaleX: 1, scaleY: 1 };
 
+describe("custom section drag boundaries", () => {
+  const items = [
+    pinnedHeader,
+    thread("pin", "pinned"),
+    divider,
+    thread("active", "active"),
+    marker("custom-header:waiting"),
+    thread("waiting", "custom"),
+    marker("custom-create"),
+    settledHeader,
+    thread("done", "settled"),
+  ];
+
+  it("rejects category rows and headers as reorder targets and sources", () => {
+    expect(resolveSidebarDropTarget(items, "active", "waiting")).toBeNull();
+    expect(
+      resolveSidebarDropTarget(items, "active", sidebarMarkerId("custom-header:waiting")),
+    ).toBeNull();
+    expect(resolveSidebarDropTarget(items, "active", sidebarMarkerId("custom-create"))).toBeNull();
+    expect(resolveSidebarDropTarget(items, "waiting", "pin")).toBeNull();
+  });
+
+  it("keeps categories in place while preserving normal pin, active and settled moves", () => {
+    expect(resolveSidebarDropTarget(items, "pin", "active")).toEqual({
+      section: "active",
+      pinnedOrder: [],
+      activeOrder: ["active", "pin"],
+    });
+    expect(resolveSidebarDropTarget(items, "active", "pin")?.section).toBe("pinned");
+    expect(resolveSidebarDropTarget(items, "active", "done")?.section).toBe("settled");
+    const transforms = preview(
+      { items, settledOrder: ["done"], settledExpanded: true },
+      "pin",
+      "active",
+    );
+    expect(transforms.get("waiting")).toEqual(stationary);
+    expect(transforms.get(sidebarMarkerId("custom-header:waiting"))).toEqual(stationary);
+  });
+});
+
 function layout(
   items: readonly SidebarListItem[],
   active: string,

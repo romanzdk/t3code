@@ -45,3 +45,15 @@ describe("local storage errors", () => {
     expect(getLocalStorageItem("read-key", Schema.String)).toBe("saved value");
   });
 });
+
+it("reports failed writes so callers can keep unsaved input", async () => {
+  const storage = createStorage({
+    setItem: () => {
+      throw new Error("full");
+    },
+  });
+  vi.stubGlobal("window", { localStorage: storage, dispatchEvent: vi.fn() });
+  using _log = vi.spyOn(console, "error").mockImplementation(() => {});
+  const { writeLocalStorageValue } = await import("./useLocalStorage");
+  expect(writeLocalStorageValue("key", "new", "old", Schema.String)).toBe(false);
+});

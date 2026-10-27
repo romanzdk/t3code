@@ -117,6 +117,18 @@ import { startNewThreadFromContext } from "../lib/chatThreadActions";
 import { useClientSettings } from "../hooks/useSettings";
 import { useCopyToClipboard } from "../hooks/useCopyToClipboard";
 import { useLocalStorage } from "../hooks/useLocalStorage";
+import {
+  assignSidebarCategory,
+  deleteSidebarCategory,
+  groupSidebarCategoryThreads,
+  sidebarCategoryMenuItem,
+  sidebarCategoryNameError,
+  SidebarCategoriesSchema,
+  DEFAULT_SIDEBAR_CATEGORIES,
+  SIDEBAR_CATEGORIES_STORAGE_KEY,
+  type SidebarCategories,
+} from "./Sidebar.categories";
+import { SidebarCategoryDialog, SidebarCategoryHeader } from "./sidebar/SidebarCategoryControls";
 import { useNowMinute } from "../hooks/useNowMinute";
 import {
   useEnvironmentIdentities,
@@ -150,7 +162,7 @@ import {
 } from "../threadRoutes";
 import type { SidebarThreadSummary } from "../types";
 import { isScratchProject } from "@t3tools/client-runtime/state/projects";
-import { cn } from "~/lib/utils";
+import { cn, randomUUID } from "~/lib/utils";
 import { ProjectEnvironmentBadge } from "./ProjectEnvironmentBadge";
 import {
   buildDraftActionMenuItems,
@@ -235,6 +247,7 @@ import {
   SidebarDragBoundary,
   SidebarSectionHeader,
   SidebarSectionPlaceholder,
+  SortableSidebarMarker,
 } from "./sidebar/SidebarListMarkers";
 
 function sameSidebarProviderEntries(
@@ -316,6 +329,7 @@ interface SidebarThreadPartitionInput {
   readonly serverConfigs: ReadonlyMap<EnvironmentId, EnvironmentServerConfig>;
   readonly optimisticDrop: SidebarOptimisticDrop | null;
   readonly workingShelfEnabled: boolean;
+  readonly categoryAssignments: Readonly<Record<string, string>>;
   // Snooze wakes, the queued-turn grace and the Working shelf's exit grace depend
   // on the clock, so the minute tick, the precise snooze-wake tick and the inbox
   // tracker's expiry version are inputs: a new key repartitions.
@@ -376,6 +390,7 @@ function useSidebarThreads(input: {
   readonly threads: readonly EnvironmentThreadShell[];
   readonly delegatedUnderParent: ReadonlySet<string>;
   readonly routeRowThreadKey: string | null;
+  readonly categories: SidebarCategories;
 }) {
   const {
     projectScopeKey,
@@ -385,6 +400,7 @@ function useSidebarThreads(input: {
     threads,
     delegatedUnderParent,
     routeRowThreadKey,
+    categories,
   } = input;
   const workingShelfEnabled = useClientSettings((s) => s.sidebarWorkingShelfEnabled);
   const inboxReturnsVersion = useSyncExternalStore(
@@ -426,11 +442,24 @@ function useSidebarThreads(input: {
     serverConfigs,
     optimisticDrop,
     workingShelfEnabled,
+    categoryAssignments: categories.assignments,
     clockKey: `${nowMinute}:${snoozeWakeClock}:${inboxReturnsVersion}`,
   });
 
-  const { pinnedThreads, activeThreads, workingThreads, snoozedThreads, settledThreads } =
-    partition;
+  const {
+    pinnedThreads,
+    activeThreads,
+    customThreads,
+    workingThreads,
+    snoozedThreads,
+    settledThreads,
+  } = partition;
+  const categoryGroups = groupSidebarCategoryThreads(
+    customThreads,
+    categories,
+    threadShellKey,
+    routeRowThreadKey,
+  );
   // Older settled threads load in pages; the shelf lists them only as far as they are loaded.
   const olderSettledShelf = useOlderSettledShelf({
     scopes: olderSettledScopes([...serverConfigs.keys()], scopedProjectKeys),
@@ -466,6 +495,7 @@ function useSidebarThreads(input: {
   const orderedThreads = [
     ...pinnedThreads,
     ...activeThreads,
+    ...categoryGroups.flatMap((group) => group.visibleThreads),
     ...visibleWorkingThreads,
     ...visibleSnoozedThreads,
     ...renderedSettledThreads,
@@ -474,6 +504,7 @@ function useSidebarThreads(input: {
   for (const [list, section] of [
     [pinnedThreads, "pinned"],
     [activeThreads, "active"],
+    [customThreads, "custom"],
     [workingThreads, "working"],
     [snoozedThreads, "snoozed"],
     [settledThreads, "settled"],
@@ -484,9 +515,11 @@ function useSidebarThreads(input: {
     ...partition,
     threads,
     workingShelfEnabled,
+    categoryGroups,
     searchableThreads: [
       ...pinnedThreads,
       ...activeThreads,
+      ...customThreads,
       ...workingThreads,
       ...snoozedThreads,
       ...settledThreads,
@@ -533,18 +566,27 @@ function partitionSidebarThreads(input: SidebarThreadPartitionInput) {
     serverConfigs,
     optimisticDrop,
     workingShelfEnabled,
+    categoryAssignments,
   } = input;
   const preciseNow = new Date().toISOString();
   const visible = filterSidebarV2VisibleThreads(threads, scopedProjectKeys, delegatedUnderParent);
   const inboxObservation = inboxReturns.observe(workingShelfEnabled ? threads : null);
   const pinned: EnvironmentThreadShell[] = [];
   const active: EnvironmentThreadShell[] = [];
+  const custom: EnvironmentThreadShell[] = [];
   const working: EnvironmentThreadShell[] = [];
-  const inbox = (thread: EnvironmentThreadShell, manuallyMoved = false) =>
-    workingShelfEnabled &&
-    (manuallyMoved ? isThreadWorking(thread) : inboxObservation.isWorking(thread))
-      ? working
-      : active;
+  const inbox = (thread: EnvironmentThreadShell, manuallyMoved = false) => {
+    const section = resolveSidebarThreadSection({
+      snoozed: false,
+      settled: false,
+      pinned: false,
+      categorized: Object.hasOwn(categoryAssignments, threadShellKey(thread)),
+      working:
+        workingShelfEnabled &&
+        (manuallyMoved ? isThreadWorking(thread) : inboxObservation.isWorking(thread)),
+    });
+    return section === "custom" ? custom : section === "working" ? working : active;
+  };
   const snoozed: EnvironmentThreadShell[] = [];
   const settled: EnvironmentThreadShell[] = [];
   const draggable = new Set<string>();
@@ -607,6 +649,7 @@ function partitionSidebarThreads(input: SidebarThreadPartitionInput) {
           }),
     draggableThreadKeys: draggable,
     activeReorderableThreadKeys: activeReorderable,
+    customThreads: sortThreadsForSidebar(custom),
     activeThreads:
       optimisticDrop?.section !== "active" || optimisticDrop.order === null
         ? sortedActive
@@ -915,6 +958,27 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
   const highlightedProjectScopeKeyRef = useRef<string | null>(null);
   // Hold dropped rows until server placement is confirmed; block another pickup from replacing the hold.
   const [optimisticDrop, setOptimisticDrop] = useState<SidebarOptimisticDrop | null>(null);
+  const [categories, setCategories] = useLocalStorage(
+    SIDEBAR_CATEGORIES_STORAGE_KEY,
+    DEFAULT_SIDEBAR_CATEGORIES,
+    SidebarCategoriesSchema,
+  );
+  const [editingCategory, setEditingCategory] = useState<string | null | undefined>();
+  const moveToCategory = (keys: readonly string[], categoryId: string | null) => {
+    clearSelection();
+    setCategories((current) => assignSidebarCategory(current, keys, categoryId));
+  };
+  const handleCategoryMenuAction = (action: string, keys: readonly string[]): boolean => {
+    if (action === "section:active") {
+      moveToCategory(keys, null);
+      return true;
+    }
+    if (action.startsWith("section:custom:")) {
+      moveToCategory(keys, action.slice("section:custom:".length));
+      return true;
+    }
+    return false;
+  };
   const threadSearchInputRef = useRef<HTMLInputElement>(null);
   const [threadSearchQuery, setThreadSearchQuery] = useState("");
   const [searchHighlightKey, setSearchHighlightKey] = useState<string | null>(null);
@@ -1118,6 +1182,8 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     draggableThreadKeys,
     activeReorderableThreadKeys,
     activeThreads,
+    customThreads,
+    categoryGroups,
     workingThreads,
     snoozedThreads,
     settledThreads,
@@ -1154,6 +1220,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     threads,
     delegatedUnderParent,
     routeRowThreadKey,
+    categories,
   });
 
   // Ranked across environments as the palette ranks them, so one
@@ -1509,7 +1576,10 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     };
   };
 
-  const isContextDrag = dragState?.contextDrag === true || dragState?.activeSection === "working";
+  const isContextDrag =
+    dragState?.contextDrag === true ||
+    dragState?.activeSection === "working" ||
+    dragState?.activeSection === "custom";
   const dragTargetSection = isContextDrag ? null : (dragState?.targetSection ?? null);
   const finishThreadDrag = (started: boolean) => {
     dragSensorRef.current = null;
@@ -1591,6 +1661,8 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
         return (
           thread !== undefined &&
           sectionByThreadKeyRef.current.get(key) === originSection &&
+          (originSection !== "custom" ||
+            categories.assignments[key] === categories.assignments[originKey]) &&
           (action === "unsnooze"
             ? capabilities?.threadSnooze === true
             : capabilities?.threadSettlement === true)
@@ -1716,16 +1788,6 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
         const key = scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id));
         return { kind: "thread", key, section };
       });
-    if (
-      pinnedThreads.length +
-        activeThreads.length +
-        workingThreads.length +
-        snoozedThreads.length +
-        settledCount ===
-      0
-    ) {
-      return [];
-    }
     const items: SidebarListItem[] = [{ kind: "marker", marker: "pinned-header" }];
     const pinnedRows = rowsOf(pinnedThreads, "pinned");
     items.push(...pinnedRows);
@@ -1733,6 +1795,11 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     const activeRows = rowsOf(activeThreads, "active");
     items.push({ kind: "marker", marker: "active-placeholder" });
     items.push(...activeRows);
+    for (const group of categoryGroups) {
+      items.push({ kind: "marker", marker: `custom-header:${group.category.id}` });
+      items.push(...rowsOf(group.visibleThreads, "custom"));
+    }
+    items.push({ kind: "marker", marker: "custom-create" });
     if (workingThreads.length > 0) {
       items.push({ kind: "marker", marker: "working-header" });
       items.push(...rowsOf(visibleWorkingThreads, "working"));
@@ -2093,6 +2160,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
       const clicked = await settlePromise(() =>
         api.contextMenu.show(
           [
+            sidebarCategoryMenuItem(categories, threadKeys),
             ...(unpinMenuItem
               ? [{ ...unpinMenuItem, disabled: !canOperateThreads(pinnedSelectedThreads) }]
               : []),
@@ -2145,6 +2213,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
         ),
       );
       if (clicked._tag === "Failure" || clicked.value === null) return;
+      if (handleCategoryMenuAction(clicked.value, threadKeys)) return;
       const actionTargets =
         clicked.value === "unpin"
           ? pinnedSelectedThreads
@@ -2392,41 +2461,45 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
           ) ?? null;
         const clicked = await settlePromise(() =>
           api.contextMenu.show(
-            buildThreadActionMenuItems({
-              canOperate: readEnvironmentScope(
-                threadRef.environmentId,
-                AuthOrchestrationOperateScope,
-              ),
-              branch: thread.branch ?? null,
-              projectFilter: threadProjectGroup
-                ? {
-                    label: threadProjectGroup.displayName,
-                    isActive: projectScopeKey === threadProjectGroup.projectKey,
-                  }
-                : null,
-              isPinned,
-              isSettled,
-              autoSettleEnabled: thread.autoSettleDisabledAt == null,
-              isSnoozed,
-              canSnoozeNow: canSnooze(thread, { now: new Date().toISOString() }),
-              isRegeneratingTitle,
-              isRunning: !threadRuntimeCanArchive(thread.runtime),
-              canShareWithGuest: appAtomRegistry.get(
-                canShareWithGuestAtom(threadRef.environmentId),
-              ),
-              supports: {
-                settlement: supportsSettlement,
-                autoSettleOptOut: supportsAutoSettleOptOut,
-                snooze: supportsSnooze,
-                pinning: supportsPinning,
-                titleRegeneration: supportsTitleRegeneration,
-              },
-              snoozePresets,
-            }),
+            [
+              sidebarCategoryMenuItem(categories, [threadKey]),
+              ...buildThreadActionMenuItems({
+                canOperate: readEnvironmentScope(
+                  threadRef.environmentId,
+                  AuthOrchestrationOperateScope,
+                ),
+                branch: thread.branch ?? null,
+                projectFilter: threadProjectGroup
+                  ? {
+                      label: threadProjectGroup.displayName,
+                      isActive: projectScopeKey === threadProjectGroup.projectKey,
+                    }
+                  : null,
+                isPinned,
+                isSettled,
+                autoSettleEnabled: thread.autoSettleDisabledAt == null,
+                isSnoozed,
+                canSnoozeNow: canSnooze(thread, { now: new Date().toISOString() }),
+                isRegeneratingTitle,
+                isRunning: !threadRuntimeCanArchive(thread.runtime),
+                canShareWithGuest: appAtomRegistry.get(
+                  canShareWithGuestAtom(threadRef.environmentId),
+                ),
+                supports: {
+                  settlement: supportsSettlement,
+                  autoSettleOptOut: supportsAutoSettleOptOut,
+                  snooze: supportsSnooze,
+                  pinning: supportsPinning,
+                  titleRegeneration: supportsTitleRegeneration,
+                },
+                snoozePresets,
+              }),
+            ],
             position,
           ),
         );
         if (clicked._tag === "Failure" || clicked.value === null) return;
+        if (handleCategoryMenuAction(clicked.value, [threadKey])) return;
         if (threadActionRequiresOperate(clicked.value) && !checkThreadOperations([thread])) return;
         if (clicked.value?.startsWith("snooze:")) {
           const preset =
@@ -2710,6 +2783,30 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
   return (
     <>
       <ThreadContextDragGhost />
+      {editingCategory !== undefined && (
+        <SidebarCategoryDialog
+          categories={categories.categories}
+          category={
+            categories.categories.find((category) => category.id === editingCategory) ?? null
+          }
+          onClose={() => setEditingCategory(undefined)}
+          onSave={(name) => {
+            const id = editingCategory ?? randomUUID();
+            return setCategories((current) => {
+              if (sidebarCategoryNameError(current.categories, name, id) !== null) return current;
+              return {
+                ...current,
+                categories:
+                  editingCategory === null
+                    ? [...current.categories, { id, name, collapsed: false }]
+                    : current.categories.map((category) =>
+                        category.id === id ? { ...category, name } : category,
+                      ),
+              };
+            });
+          }}
+        />
+      )}
       <SidebarChromeHeader isElectron={isElectron} />
       <SidebarContent
         className="min-h-full"
@@ -2970,7 +3067,10 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                           scopeThreadRef(thread.environmentId, thread.id),
                         );
                         const isCard =
-                          section === "active" || section === "pinned" || section === "working";
+                          section === "active" ||
+                          section === "pinned" ||
+                          section === "working" ||
+                          section === "custom";
                         const rowVariant = isCard ? "card" : "slim";
                         return (
                           <SortableThreadRow
@@ -3091,7 +3191,62 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                           items.push(renderThreadRow(threadByKey.get(item.key)!, item.section));
                           continue;
                         }
+                        if (item.marker.startsWith("custom-header:")) {
+                          const group = categoryGroups.find(
+                            (group) => `custom-header:${group.category.id}` === item.marker,
+                          );
+                          if (group)
+                            items.push(
+                              <SortableSidebarMarker
+                                key={item.marker}
+                                marker={item.marker}
+                                className="mx-0.5 list-none"
+                              >
+                                <SidebarCategoryHeader
+                                  category={group.category}
+                                  count={group.threads.length}
+                                  onToggle={() => {
+                                    clearSelection();
+                                    setCategories((current) => ({
+                                      ...current,
+                                      categories: current.categories.map((category) =>
+                                        category.id === group.category.id
+                                          ? { ...category, collapsed: !category.collapsed }
+                                          : category,
+                                      ),
+                                    }));
+                                  }}
+                                  onRename={() => setEditingCategory(group.category.id)}
+                                  onDelete={() => {
+                                    clearSelection();
+                                    setCategories((current) =>
+                                      deleteSidebarCategory(current, group.category.id),
+                                    );
+                                  }}
+                                />
+                              </SortableSidebarMarker>,
+                            );
+                          continue;
+                        }
                         switch (item.marker) {
+                          case "custom-create":
+                            items.push(
+                              <SortableSidebarMarker
+                                key="custom-create"
+                                marker="custom-create"
+                                className="mx-0.5 list-none"
+                              >
+                                <Button
+                                  variant="ghost-muted"
+                                  size="sm"
+                                  className="w-full justify-start"
+                                  onClick={() => setEditingCategory(null)}
+                                >
+                                  <PlusIcon className="size-3" /> New section
+                                </Button>
+                              </SortableSidebarMarker>,
+                            );
+                            break;
                           case "pinned-header":
                             items.push(
                               <SidebarDragBoundary
@@ -3238,6 +3393,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
           visibleDraftSessionCount === 0 &&
           pinnedThreads.length +
             activeThreads.length +
+            customThreads.length +
             workingThreads.length +
             snoozedThreads.length +
             settledCount ===

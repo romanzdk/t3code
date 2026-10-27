@@ -51,7 +51,7 @@ vi.mock(import("../../editorPreferences"), async (importOriginal) => {
       const [preferred, setPreferred] = actual.usePreferredEditor(available);
       const recordPreferred: typeof setPreferred = (editor) => {
         state.setPreferred(editor);
-        setPreferred(editor);
+        return setPreferred(editor);
       };
       return [preferred, recordPreferred] as const;
     },

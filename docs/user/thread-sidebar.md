@@ -122,6 +122,23 @@ rename a thread, regenerate its title, or link and unlink a pull request. These 
 appear on web, desktop, and mobile without requiring the originating browser to remain
 open.
 
+### Organize threads into your own sections
+
+On web and desktop, choose **New section** in the sidebar to create a named group.
+An empty **Waiting** section is ready to use. Open a thread's menu and choose
+**Move to section**, or select several threads and move them together. Choose
+**Active** to remove their section assignment. Use a section's menu to rename or
+delete it; deleting a section never deletes its threads. Click its name to fold
+or expand it. Search includes threads in folded sections.
+
+Sections, assignments, and folded state are device-local. They are separate in
+each browser profile and desktop installation and do not sync to mobile or other
+devices. Assignments distinguish threads in different connected environments.
+Pinned, snoozed, and settled threads keep their assignment and return to it when
+active again. Working threads stay in their chosen section. Child threads stay
+attached to their parent. Categorized threads use menu moves rather than drag
+sorting; other threads keep their usual drag behavior.
+
 ### Fold working threads (beta)
 
 Threads that are working or waiting on work they will resume from move into a collapsed

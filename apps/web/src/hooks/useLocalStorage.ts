@@ -128,7 +128,7 @@ export function writeLocalStorageValue<T, E>(
   value: T | ((val: T) => T),
   initialValue: T,
   schema: Schema.Codec<T, E>,
-): void {
+): boolean {
   try {
     let valueToStore: T;
     if (typeof value === "function") {
@@ -157,8 +157,10 @@ export function writeLocalStorageValue<T, E>(
       setLocalStorageItem(key, valueToStore, schema);
     }
     dispatchLocalStorageChange(key);
+    return true;
   } catch (error) {
     console.error("[LOCALSTORAGE] Could not update stored value.", error);
+    return false;
   }
 }
 
@@ -166,7 +168,7 @@ export function useLocalStorage<T, E>(
   key: string,
   initialValue: T,
   schema: Schema.Codec<T, E>,
-): [T, (value: T | ((val: T) => T)) => void] {
+): [T, (value: T | ((val: T) => T)) => boolean] {
   const getSnapshot = () => readSerializedValue(key);
 
   const subscribe = (onStoreChange: () => void) => {
@@ -193,7 +195,7 @@ export function useLocalStorage<T, E>(
   const storedValue = decodeOrInitial(key, schema, serializedValue, initialValue);
 
   const setValue = (value: T | ((val: T) => T)) => {
-    writeLocalStorageValue(key, value, initialValue, schema);
+    return writeLocalStorageValue(key, value, initialValue, schema);
   };
 
   return [storedValue, setValue];

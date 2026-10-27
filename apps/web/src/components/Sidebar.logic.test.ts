@@ -33,6 +33,7 @@ import {
   type SidebarListMarker,
   type SidebarSection,
   resolveSidebarDropVerb,
+  resolveSidebarThreadSection,
 } from "./Sidebar.logic";
 import { threadSearchMatchKey } from "@t3tools/client-runtime/state/thread-search";
 import { EnvironmentId, ProjectId, ProviderInstanceId, RunId, ThreadId } from "@t3tools/contracts";
@@ -51,6 +52,23 @@ import {
 } from "./sidebar/routeReveal";
 
 const localEnvironmentId = EnvironmentId.make("environment-local");
+
+describe("custom sidebar sections", () => {
+  it("keeps manually categorized work together below pinned, snoozed and settled threads", () => {
+    const active = {
+      snoozed: false,
+      settled: false,
+      pinned: false,
+      categorized: true,
+      working: true,
+    };
+    expect(resolveSidebarThreadSection(active)).toBe("custom");
+    expect(resolveSidebarThreadSection({ ...active, pinned: true })).toBe("pinned");
+    expect(resolveSidebarThreadSection({ ...active, pinned: true, settled: true })).toBe("settled");
+    expect(resolveSidebarThreadSection({ ...active, snoozed: true })).toBe("snoozed");
+    expect(resolveSidebarThreadSection({ ...active, categorized: false })).toBe("working");
+  });
+});
 
 describe("deleteSelectedThreadEntries", () => {
   const entries = [{ threadKey: "one" }, { threadKey: "two" }, { threadKey: "three" }] as const;

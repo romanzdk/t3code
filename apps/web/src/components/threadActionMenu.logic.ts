@@ -92,7 +92,7 @@ export interface ThreadActionMenuState {
 }
 
 /** Local navigation, read markers, and copying remain available to read-only clients. */
-export function threadActionRequiresOperate(action: ThreadActionMenuId): boolean {
+export function threadActionRequiresOperate(action: string): boolean {
   return ![
     "new-thread-on-branch",
     "project-settings",
