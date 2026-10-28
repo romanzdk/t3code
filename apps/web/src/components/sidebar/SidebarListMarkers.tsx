@@ -44,12 +44,13 @@ export function SidebarSectionPlaceholder(props: {
   label: string;
   showHint: boolean;
   isDropTarget: boolean;
+  reserveSpace?: boolean;
 }) {
   return (
     <SortableSidebarMarker
       marker={props.marker}
       data-testid={`sidebar-${props.marker}`}
-      className="relative mx-0.5 -mb-px h-0"
+      className={cn("relative mx-0.5 -mb-px", props.reserveSpace && props.showHint ? "h-9" : "h-0")}
     >
       {props.showHint ? (
         <div

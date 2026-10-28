@@ -119,6 +119,8 @@ import { useCopyToClipboard } from "../hooks/useCopyToClipboard";
 import { useLocalStorage } from "../hooks/useLocalStorage";
 import {
   assignSidebarCategory,
+  resolveSidebarCategoryDrop,
+  sidebarCategoryMoveActions,
   deleteSidebarCategory,
   groupSidebarCategoryThreads,
   sidebarCategoryMenuItem,
@@ -964,21 +966,6 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     SidebarCategoriesSchema,
   );
   const [editingCategory, setEditingCategory] = useState<string | null | undefined>();
-  const moveToCategory = (keys: readonly string[], categoryId: string | null) => {
-    clearSelection();
-    setCategories((current) => assignSidebarCategory(current, keys, categoryId));
-  };
-  const handleCategoryMenuAction = (action: string, keys: readonly string[]): boolean => {
-    if (action === "section:active") {
-      moveToCategory(keys, null);
-      return true;
-    }
-    if (action.startsWith("section:custom:")) {
-      moveToCategory(keys, action.slice("section:custom:".length));
-      return true;
-    }
-    return false;
-  };
   const threadSearchInputRef = useRef<HTMLInputElement>(null);
   const [threadSearchQuery, setThreadSearchQuery] = useState("");
   const [searchHighlightKey, setSearchHighlightKey] = useState<string | null>(null);
@@ -1008,6 +995,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     readonly occurredAt: string;
     readonly activationY: number | null;
     readonly targetSection: SidebarSection | null;
+    readonly targetCategoryId: string | null;
     readonly contextDrag: boolean;
   } | null>(null);
   const dragSensorRef = useRef<SidebarPointerSensor | null>(null);
@@ -1576,10 +1564,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     };
   };
 
-  const isContextDrag =
-    dragState?.contextDrag === true ||
-    dragState?.activeSection === "working" ||
-    dragState?.activeSection === "custom";
+  const isContextDrag = dragState?.contextDrag === true;
   const dragTargetSection = isContextDrag ? null : (dragState?.targetSection ?? null);
   const finishThreadDrag = (started: boolean) => {
     dragSensorRef.current = null;
@@ -1650,6 +1635,56 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     snoozedThreadKeysRef.current = snoozedThreadKeys;
     sectionByThreadKeyRef.current = sectionByThreadKey;
   });
+  const moveToCategory = async (keys: readonly string[], categoryId: string | null) => {
+    for (const key of keys) {
+      const thread = threadByKeyRef.current.get(key);
+      if (!thread) continue;
+      const ref = scopeThreadRef(thread.environmentId, thread.id);
+      const actions = sidebarCategoryMoveActions(
+        thread,
+        serverConfigs.get(thread.environmentId)?.environment.capabilities,
+      );
+      const operations = { unpin: unpinThread, unsettle: unsettleThread, unsnooze: unsnoozeThread };
+      if (actions.length > 0 && !checkThreadOperations([thread])) return;
+      for (const action of actions) {
+        const result = await operations[action](ref);
+        if (result._tag === "Failure") {
+          if (!isAtomCommandInterrupted(result)) {
+            const error = squashAtomCommandFailure(result);
+            toastManager.add({
+              type: "error",
+              title: "Failed to move thread",
+              description: String(error),
+            });
+          }
+          return;
+        }
+      }
+      if (
+        !setCategories((current) => ({
+          ...assignSidebarCategory(current, [key], categoryId),
+          categories: current.categories.map((category) =>
+            category.id === categoryId ? { ...category, collapsed: false } : category,
+          ),
+        }))
+      ) {
+        toastManager.add({ type: "error", title: "Could not save the section assignment" });
+        return;
+      }
+    }
+    clearSelection();
+  };
+  const handleCategoryMenuAction = (action: string, keys: readonly string[]): boolean => {
+    if (action === "section:active") {
+      void moveToCategory(keys, null);
+      return true;
+    }
+    if (action.startsWith("section:custom:")) {
+      void moveToCategory(keys, action.slice("section:custom:".length));
+      return true;
+    }
+    return false;
+  };
   const startActionSweep = useStableCallback(
     (threadRef: ScopedThreadRef, action: SidebarSweepAction, event: PointerEvent) => {
       const originKey = scopedThreadKey(threadRef);
@@ -1773,6 +1808,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
       activeKey,
       activeSection,
       targetSection: activeSection,
+      targetCategoryId: null,
       contextDrag: false,
       occurredAt: new Date().toISOString(),
       activationY:
@@ -1852,10 +1888,21 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     const target = event.over
       ? resolveSidebarDropTarget(sidebarListItems, String(event.active.id), String(event.over.id))
       : null;
+    const categoryDrop = event.over
+      ? resolveSidebarCategoryDrop(sidebarListItems, String(event.active.id), String(event.over.id))
+      : null;
     setDragState((current) =>
       current === null || current.activeKey !== String(event.active.id)
         ? current
-        : { ...current, targetSection: target?.section ?? null },
+        : {
+            ...current,
+            targetSection: categoryDrop
+              ? categoryDrop.categoryId === null
+                ? "active"
+                : "custom"
+              : (target?.section ?? null),
+            targetCategoryId: categoryDrop?.categoryId ?? null,
+          },
     );
   };
   const sortableIds = sidebarListItems.map(sidebarListItemId);
@@ -1891,6 +1938,8 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
     if (source === undefined) return createSidebarCollisionDetection(() => false);
     return createSidebarCollisionDetection(
       (id) => {
+        if (resolveSidebarCategoryDrop(sidebarListItems, draggedThreadKey, id) !== null)
+          return true;
         const target = resolveSidebarDropTarget(sidebarListItems, draggedThreadKey, id);
         if (target === null) return false;
         return (
@@ -1921,6 +1970,17 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
   })();
   const handleThreadDragEnd = (event: DragEndEvent) => {
     const activeKey = String(event.active.id);
+    const categoryDrop = event.over
+      ? resolveSidebarCategoryDrop(sidebarListItems, activeKey, String(event.over.id))
+      : null;
+    if (categoryDrop !== null) {
+      const selected = useThreadSelectionStore.getState().selectedThreadKeys;
+      void moveToCategory(
+        selected.has(activeKey) ? [...selected] : [activeKey],
+        categoryDrop.categoryId,
+      );
+      return;
+    }
     const activeSection = sectionByThreadKey.get(activeKey);
     const target =
       event.over === null
@@ -3205,6 +3265,10 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                                 <SidebarCategoryHeader
                                   category={group.category}
                                   count={group.threads.length}
+                                  isDropTarget={
+                                    !isContextDrag &&
+                                    dragState?.targetCategoryId === group.category.id
+                                  }
                                   onToggle={() => {
                                     clearSelection();
                                     setCategories((current) => ({
@@ -3275,6 +3339,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                                 key="active-placeholder"
                                 marker="active-placeholder"
                                 label="Active"
+                                reserveSpace={from === "custom"}
                                 showHint={
                                   from !== null &&
                                   (activeThreads.length === 0 ||

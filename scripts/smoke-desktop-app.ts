@@ -39,10 +39,10 @@ try {
     executablePath: executable,
     // Linux CI runners do not allow the Chromium sandbox's user namespaces.
     args: ["--no-sandbox"],
-    // HOME stays real: on macOS a fake HOME has no login keychain, and safeStorage blocks the
-    // main process on a keychain dialog. macOS keeps its Electron profile in the runner's HOME.
+    // HOME isolates Electron's profile and instance lock from the installed app.
     env: {
       ...process.env,
+      HOME: home,
       XDG_CONFIG_HOME: NodePath.join(home, ".config"),
       XDG_DATA_HOME: NodePath.join(home, ".local/share"),
       T3CODE_HOME: t3Home,
@@ -62,6 +62,104 @@ try {
     step = "opening the thread";
     await thread.click();
     await page.getByText(THREAD_MESSAGE).waitFor({ timeout: STEP_TIMEOUT_MS });
+    const chooseNativeMenuItem = async (labels: string[]) => {
+      await app!.evaluate(({ Menu }, labels) => {
+        Menu.prototype.popup = function (options) {
+          let entries = this.items;
+          let selected;
+          for (const label of labels) {
+            selected = entries.find(
+              (item) => item.label === label || item.label.startsWith(`${label} (`),
+            );
+            if (!selected) throw new Error(`Missing native menu item: ${label}`);
+            entries = selected.submenu?.items ?? [];
+          }
+          selected?.click(selected, options?.window, {});
+          options?.callback?.();
+        };
+      }, labels);
+    };
+    const waiting = (count: number) =>
+      page.getByRole("button", { name: `Waiting ${count}`, exact: true });
+    step = "moving a thread through the whole-card native context menu";
+    await chooseNativeMenuItem(["Move to section", "Waiting"]);
+    await thread.click({ button: "right", position: { x: 1, y: 1 } });
+    await waiting(1).waitFor();
+    step = "moving a thread through its visible actions button";
+    await chooseNativeMenuItem(["Move to section", "Active"]);
+    await thread.getByRole("button", { name: "Thread actions", exact: true }).click();
+    await waiting(0).waitFor();
+    const second = page.locator("li[data-thread-item]", { hasText: "Second thread" });
+    const dragThreadTo = async (target: ReturnType<typeof page.locator>) => {
+      const sourceBounds = await second.boundingBox();
+      const targetBounds = await target.boundingBox();
+      if (!sourceBounds || !targetBounds) throw new Error("Missing drag bounds");
+      const x = sourceBounds.x + 70;
+      const y = sourceBounds.y + sourceBounds.height - 12;
+      await page.mouse.move(x, y);
+      await page.mouse.down();
+      await page.mouse.move(x + 10, y, { steps: 3 });
+      await page.mouse.move(targetBounds.x + 70, targetBounds.y + 5, { steps: 12 });
+      await page.mouse.up();
+    };
+    step = "dropping a thread onto an empty category";
+    await dragThreadTo(waiting(0));
+    await waiting(1).waitFor();
+    step = "dropping a categorized thread onto a collapsed category";
+    await page.getByRole("button", { name: "New section", exact: true }).click();
+    await page.getByRole("textbox", { name: "Section name" }).fill("Review");
+    await page.getByRole("button", { name: "Create", exact: true }).click();
+    const review = (count: number) =>
+      page.getByRole("button", { name: `Review ${count}`, exact: true });
+    await review(0).click();
+    await dragThreadTo(review(0));
+    await review(1).waitFor();
+    if ((await review(1).getAttribute("aria-expanded")) !== "true")
+      throw new Error("Category did not expand after drop");
+    step = "returning a categorized thread to Active";
+    await dragThreadTo(thread);
+    await review(0).waitFor();
+    step = "moving a pinned thread to a category";
+    await chooseNativeMenuItem(["Pin thread"]);
+    await thread.getByRole("button", { name: "Thread actions", exact: true }).click();
+    await thread.getByRole("button", { name: "Unpin thread" }).waitFor();
+    await chooseNativeMenuItem(["Move to section", "Waiting"]);
+    await thread.getByRole("button", { name: "Thread actions", exact: true }).click();
+    await waiting(1).waitFor();
+    if ((await thread.getByRole("button", { name: "Unpin thread" }).count()) !== 0)
+      throw new Error("Moving to a category left the thread pinned");
+    step = "moving a settled and snoozed thread to a category";
+    await chooseNativeMenuItem(["Settle thread"]);
+    await thread.getByRole("button", { name: "Thread actions", exact: true }).click();
+    await thread.getByRole("button", { name: "Un-settle thread", exact: true }).waitFor();
+    await chooseNativeMenuItem(["Snooze", "In 1 hour"]);
+    await thread.getByRole("button", { name: "Thread actions", exact: true }).click();
+    await thread.getByRole("button", { name: "Wake thread now", exact: true }).waitFor();
+    await chooseNativeMenuItem(["Move to section", "Waiting"]);
+    await thread.getByRole("button", { name: "Thread actions", exact: true }).click();
+    await waiting(1).waitFor();
+    await thread.getByRole("button", { name: "Settle thread", exact: true }).waitFor();
+    step = "moving multiple selected threads through the native menu";
+    const modifier = process.platform === "darwin" ? "Meta" : "Control";
+    await thread
+      .locator('[role="button"]')
+      .first()
+      .click({ modifiers: [modifier], position: { x: 70, y: 30 } });
+    await second
+      .locator('[role="button"]')
+      .first()
+      .click({ modifiers: [modifier], position: { x: 70, y: 30 } });
+    await chooseNativeMenuItem(["Move to section", "Waiting"]);
+    await second.getByRole("button", { name: "Thread actions", exact: true }).click();
+    await waiting(2).waitFor();
+    step = "returning a thread to an empty Active section";
+    await dragThreadTo(page.getByTestId("sidebar-active-placeholder"));
+    await waiting(1).waitFor();
+    step = "checking category persistence";
+    await page.reload();
+    await waiting(1).waitFor();
+    NodeFS.mkdirSync(artifactsDir, { recursive: true });
+    await page.screenshot({ path: NodePath.join(artifactsDir, "categories.png") });
   } catch (error) {
     NodeFS.mkdirSync(artifactsDir, { recursive: true });
     await page
@@ -69,7 +167,9 @@ try {
       .catch(() => {});
     throw error;
   }
-  console.log("Desktop launch check passed: the app opened and showed the seeded thread.");
+  console.log(
+    "Desktop launch and category checks passed: menus, drops, persistence and saved conversation display.",
+  );
 } catch (error) {
   console.error(`Desktop launch check failed while ${step}.`);
   NodeFS.mkdirSync(artifactsDir, { recursive: true });

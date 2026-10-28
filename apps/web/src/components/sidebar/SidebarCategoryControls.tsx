@@ -19,6 +19,7 @@ import {
 export function SidebarCategoryHeader(props: {
   category: SidebarCategory;
   count: number;
+  isDropTarget?: boolean;
   onToggle: () => void;
   onRename: () => void;
   onDelete: () => void;
@@ -28,6 +29,7 @@ export function SidebarCategoryHeader(props: {
       <div className="min-w-0 flex-1 overflow-hidden">
         <CollapsibleSectionHeader
           expanded={!props.category.collapsed}
+          tone={props.isDropTarget ? "accent" : "muted"}
           onClick={props.onToggle}
           accessory={<span className="font-normal tabular-nums">{props.count}</span>}
         >

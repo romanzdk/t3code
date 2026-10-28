@@ -125,9 +125,10 @@ open.
 ### Organize threads into your own sections
 
 On web and desktop, choose **New section** in the sidebar to create a named group.
-An empty **Waiting** section is ready to use. Open a thread's menu and choose
+An empty **Waiting** section is ready to use. Drag a thread onto a section's header
+or another thread in that section. You can also open **Thread actions** and choose
 **Move to section**, or select several threads and move them together. Choose
-**Active** to remove their section assignment. Use a section's menu to rename or
+**Active** or drag back to the active list to remove their section assignment. Use a section's menu to rename or
 delete it; deleting a section never deletes its threads. Click its name to fold
 or expand it. Search includes threads in folded sections.
 
@@ -136,8 +137,9 @@ each browser profile and desktop installation and do not sync to mobile or other
 devices. Assignments distinguish threads in different connected environments.
 Pinned, snoozed, and settled threads keep their assignment and return to it when
 active again. Working threads stay in their chosen section. Child threads stay
-attached to their parent. Categorized threads use menu moves rather than drag
-sorting; other threads keep their usual drag behavior.
+attached to their parent. Moving to a section wakes, un-settles, and unpins a thread
+so it appears there. Dropping onto a folded section expands it. Threads within a
+custom section keep their existing order.
 
 ### Fold working threads (beta)
 

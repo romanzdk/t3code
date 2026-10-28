@@ -1,6 +1,8 @@
 import * as Schema from "effect/Schema";
 import { parseScopedThreadKey } from "@t3tools/client-runtime/environment";
-import type { ContextMenuItem } from "@t3tools/contracts";
+import type { ExecutionEnvironmentCapabilities, ContextMenuItem } from "@t3tools/contracts";
+import { sidebarListItemId, type SidebarListItem } from "./Sidebar.logic";
+import type { SidebarThreadSummary } from "../types";
 
 const SidebarCategorySchema = Schema.Struct({
   id: Schema.String,
@@ -127,4 +129,48 @@ export function sidebarCategoryMenuItem(
       })),
     ],
   };
+}
+
+export function resolveSidebarCategoryDrop(
+  items: readonly SidebarListItem[],
+  activeKey: string,
+  overId: string,
+): { readonly categoryId: string | null } | null {
+  const active = items.find((item) => item.kind === "thread" && item.key === activeKey);
+  const overIndex = items.findIndex((item) => sidebarListItemId(item) === overId);
+  const over = items[overIndex];
+  if (!active || activeKey === overId || !over) return null;
+  if (over.kind === "marker" && over.marker.startsWith("custom-header:"))
+    return { categoryId: over.marker.slice("custom-header:".length) };
+  if (over.kind === "thread" && over.section === "custom") {
+    for (let index = overIndex - 1; index >= 0; index--) {
+      const item = items[index]!;
+      if (item.kind === "marker" && item.marker.startsWith("custom-header:"))
+        return { categoryId: item.marker.slice("custom-header:".length) };
+    }
+  }
+  if (
+    active.kind === "thread" &&
+    active.section === "custom" &&
+    ((over.kind === "thread" && over.section === "active") ||
+      (over.kind === "marker" &&
+        (over.marker === "active-placeholder" || over.marker === "pinned-divider")))
+  )
+    return { categoryId: null };
+  return null;
+}
+
+export function sidebarCategoryMoveActions(
+  thread: Pick<SidebarThreadSummary, "pinnedAt" | "settledOverride" | "snoozedUntil">,
+  capabilities:
+    | Pick<ExecutionEnvironmentCapabilities, "threadPinning" | "threadSettlement" | "threadSnooze">
+    | undefined,
+) {
+  return [
+    ...(capabilities?.threadPinning && thread.pinnedAt != null ? ["unpin" as const] : []),
+    ...(capabilities?.threadSettlement && thread.settledOverride === "settled"
+      ? ["unsettle" as const]
+      : []),
+    ...(capabilities?.threadSnooze && thread.snoozedUntil != null ? ["unsnooze" as const] : []),
+  ];
 }

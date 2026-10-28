@@ -1,4 +1,9 @@
-import { closestCenter, type CollisionDetection, type Modifier } from "@dnd-kit/core";
+import {
+  closestCenter,
+  pointerWithin,
+  type CollisionDetection,
+  type Modifier,
+} from "@dnd-kit/core";
 import { verticalListSortingStrategy, type SortingStrategy } from "@dnd-kit/sortable";
 import {
   resolveSidebarDropTarget,
@@ -8,6 +13,8 @@ import {
   type SidebarListMarker,
   type SidebarSection,
 } from "./Sidebar.logic";
+
+import { resolveSidebarCategoryDrop } from "./Sidebar.categories";
 
 const stationary = { x: 0, y: 0, scaleX: 1, scaleY: 1 };
 const hidden = { ...stationary, scaleY: 0 };
@@ -43,6 +50,16 @@ export function createSidebarCollisionDetection(
     let collisions = closestCenter(args);
     const pointer = args.pointerCoordinates;
     const items = options.items;
+    if (pointer && items) {
+      const category = pointerWithin(args).find(({ id }) => {
+        if (id === args.active.id) return false;
+        return (
+          resolveSidebarCategoryDrop(items, String(args.active.id), String(id)) !== null &&
+          isValidTarget(String(id))
+        );
+      });
+      if (category) return [category];
+    }
     const source = items?.find((item) => item.kind === "thread" && item.key === args.active.id);
     const boundary = args.droppableContainers
       .find((container) => container.id === sidebarMarkerId("pinned-divider"))

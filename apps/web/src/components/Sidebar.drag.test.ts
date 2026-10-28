@@ -766,3 +766,39 @@ describe("lifted card clearance", () => {
     expect(511 + apply(511, 36, -500, 136, 114).y).toBe(250);
   });
 });
+
+it("uses the category under the pointer when a tall dragged card's center is below the header", () => {
+  const items = [
+    pinnedHeader,
+    divider,
+    thread("source", "active"),
+    marker("custom-header:waiting"),
+    marker("custom-create"),
+  ];
+  const { rects, activeIndex } = layout(items, "source", sidebarMarkerId("custom-create"));
+  const headerIndex = 3;
+  const collisionRect = rects[4]!;
+  const args = {
+    active: {
+      id: "source",
+      data: { current: {} },
+      rect: { current: { initial: rects[activeIndex]!, translated: collisionRect } },
+    },
+    collisionRect,
+    droppableRects: new Map(items.map((item, index) => [sidebarListItemId(item), rects[index]!])),
+    droppableContainers: items.map((item, index) => ({
+      id: sidebarListItemId(item),
+      key: sidebarListItemId(item),
+      disabled: false,
+      data: { current: {} },
+      node: { current: null },
+      rect: { current: rects[index]! },
+    })),
+    pointerCoordinates: { x: 100, y: rects[headerIndex]!.top + 5 },
+  } satisfies Parameters<CollisionDetection>[0];
+  const detector = createSidebarCollisionDetection(
+    (id) => id === sidebarMarkerId("custom-header:waiting"),
+    { items },
+  );
+  expect(detector(args)[0]?.id).toBe(sidebarMarkerId("custom-header:waiting"));
+});

@@ -39,6 +39,7 @@ import {
   ClockIcon,
   GitBranchIcon,
   MessageCircleQuestionIcon,
+  MoreHorizontalIcon,
   PinIcon,
   PinOffIcon,
   ShieldQuestionIcon,
@@ -107,7 +108,7 @@ import { ProviderInstanceIcon } from "../chat/ProviderInstanceIcon";
 import { getTriggerDisplayModelName } from "../chat/providerIconUtils";
 import { shouldShowInstanceBadge, type ProviderInstanceEntry } from "../../providerInstances";
 import { useThreadRunningTerminalIds } from "../../state/terminalSessions";
-import { InlineButton } from "../ui/button";
+import { Button, InlineButton } from "../ui/button";
 import { Menu, MenuItem, MenuPopup, MenuSeparator, MenuShortcut, MenuTrigger } from "../ui/menu";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { MiddleTruncate } from "../ui/middle-truncate";
@@ -806,7 +807,14 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
   };
   const handleContextMenu = (event: ReactMouseEvent) => {
     event.preventDefault();
-    onContextMenu(threadRef, { x: event.clientX, y: event.clientY });
+    event.stopPropagation();
+    const bounds = event.currentTarget.getBoundingClientRect();
+    onContextMenu(
+      threadRef,
+      event.type === "click"
+        ? { x: bounds.right, y: bounds.bottom }
+        : { x: event.clientX, y: event.clientY },
+    );
   };
   const handleKeyDown = (event: ReactKeyboardEvent) => {
     if (event.target !== event.currentTarget) return;
@@ -1089,10 +1097,23 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
     )
   ) : null;
 
+  const threadActions = (
+    <Button
+      variant="ghost-muted"
+      size="icon-micro"
+      aria-label="Thread actions"
+      onPointerDown={(event) => event.stopPropagation()}
+      onClick={handleContextMenu}
+    >
+      <MoreHorizontalIcon className="size-3.5" />
+    </Button>
+  );
+
   if (variant === "slim") {
     return (
       <li
         data-thread-item={threadKey}
+        onContextMenu={handleContextMenu}
         {...sortableRootProps}
         {...(fileDropHandlers ?? {})}
         className={cn(
@@ -1115,7 +1136,6 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
                 onClick={handleClick}
                 onDoubleClick={handleDoubleClick}
                 onKeyDown={handleKeyDown}
-                onContextMenu={handleContextMenu}
               />
             }
           >
@@ -1133,6 +1153,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
             {title}
             {pinIndicator}
             {terminalStatusIcon}
+            {threadActions}
             {isRegeneratingTitle ? (
               <span role="status" className="sr-only">
                 Regenerating title
@@ -1261,6 +1282,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
   return (
     <li
       data-thread-item={threadKey}
+      onContextMenu={handleContextMenu}
       {...sortableRootProps}
       {...(fileDropHandlers ?? {})}
       className={cn(
@@ -1284,7 +1306,6 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
               onClick={handleClick}
               onDoubleClick={handleDoubleClick}
               onKeyDown={handleKeyDown}
-              onContextMenu={handleContextMenu}
             />
           }
         >
@@ -1312,6 +1333,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: SidebarThreadRowP
               ) : (
                 <span className="flex-1" />
               )}
+              {threadActions}
               {sortable?.isDragging ? (
                 dragDestination
               ) : (
