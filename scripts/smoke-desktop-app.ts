@@ -91,6 +91,8 @@ try {
     await thread.getByRole("button", { name: "Thread actions", exact: true }).click();
     await waiting(0).waitFor();
     const second = page.locator("li[data-thread-item]", { hasText: "Second thread" });
+    const categoryDropBox = (name: string) =>
+      page.getByTestId("sidebar-section-dropbox").filter({ hasText: name });
     let dragNumber = 0;
     const dragThreadTo = async (target: ReturnType<typeof page.locator>, cancel = false) => {
       await second.hover();
@@ -116,7 +118,7 @@ try {
       await page.mouse.up();
     };
     step = "dropping a thread onto an empty category";
-    await dragThreadTo(waiting(0));
+    await dragThreadTo(categoryDropBox("Waiting"));
     await waiting(1).waitFor();
     step = "dropping a categorized thread onto a collapsed category";
     await page.getByRole("button", { name: "New section", exact: true }).click();
@@ -126,11 +128,11 @@ try {
       page.getByRole("button", { name: `Review ${count}`, exact: true });
     await review(0).click();
     step = "canceling a category drag";
-    await dragThreadTo(review(0), true);
+    await dragThreadTo(categoryDropBox("Review"), true);
     await waiting(1).waitFor();
     await review(0).waitFor();
     step = "dropping a categorized thread onto a collapsed category";
-    await dragThreadTo(review(0));
+    await dragThreadTo(categoryDropBox("Review"));
     await review(1).waitFor();
     if ((await review(1).getAttribute("aria-expanded")) !== "true")
       throw new Error("Category did not expand after drop");

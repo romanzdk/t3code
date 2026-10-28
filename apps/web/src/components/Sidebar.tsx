@@ -248,6 +248,7 @@ import { SidebarDraftBlock } from "./sidebar/SidebarDraftBlock";
 import {
   SidebarDragBoundary,
   SidebarSectionHeader,
+  SidebarSectionDropBox,
   SidebarSectionPlaceholder,
   SortableSidebarMarker,
 } from "./sidebar/SidebarListMarkers";
@@ -3288,6 +3289,12 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                                     );
                                   }}
                                 />
+                                {from !== null && (
+                                  <SidebarSectionDropBox
+                                    label={group.category.name}
+                                    isDropTarget={dragState?.targetCategoryId === group.category.id}
+                                  />
+                                )}
                               </SortableSidebarMarker>,
                             );
                           continue;

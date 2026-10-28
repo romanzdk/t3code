@@ -39,6 +39,20 @@ export function SortableSidebarMarker(props: {
   );
 }
 
+export function SidebarSectionDropBox(props: { label: string; isDropTarget: boolean }) {
+  return (
+    <div
+      data-testid="sidebar-section-dropbox"
+      className={cn(
+        "flex h-9 items-center justify-center rounded-md border border-dashed border-sidebar-foreground/25 text-xs text-sidebar-foreground/80",
+        props.isDropTarget && "border-primary/40 bg-primary/5 text-primary",
+      )}
+    >
+      {props.label}
+    </div>
+  );
+}
+
 export function SidebarSectionPlaceholder(props: {
   marker: "active-placeholder" | "settled-placeholder";
   label: string;
@@ -52,13 +66,8 @@ export function SidebarSectionPlaceholder(props: {
       className="relative mx-0.5 -mb-px h-0"
     >
       {props.showHint ? (
-        <div
-          className={cn(
-            "absolute inset-x-0 top-0 flex h-9 items-center justify-center rounded-md border border-dashed border-sidebar-foreground/25 text-xs text-sidebar-foreground/80",
-            props.isDropTarget && "border-primary/40 bg-primary/5 text-primary",
-          )}
-        >
-          {props.label}
+        <div className="absolute inset-x-0 top-0">
+          <SidebarSectionDropBox label={props.label} isDropTarget={props.isDropTarget} />
         </div>
       ) : null}
     </SortableSidebarMarker>
