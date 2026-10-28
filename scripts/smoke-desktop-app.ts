@@ -7,6 +7,7 @@ import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 import * as NodeTimersPromises from "node:timers/promises";
 import * as NodeUtil from "node:util";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import { _electron, type ElectronApplication } from "playwright-core";
 
 // A snapshot from an older build on purpose: the packaged server must migrate it forward, as it
@@ -131,16 +132,22 @@ try {
     step = "moving a settled and snoozed thread to a category";
     await chooseNativeMenuItem(["Settle thread"]);
     await thread.getByRole("button", { name: "Thread actions", exact: true }).click();
+    const settled = page.getByRole("button", { name: /^Settled \d+$/ });
+    await settled.waitFor();
+    if ((await settled.getAttribute("aria-expanded")) !== "true") await settled.click();
     await thread.getByRole("button", { name: "Un-settle thread", exact: true }).waitFor();
     await chooseNativeMenuItem(["Snooze", "In 1 hour"]);
     await thread.getByRole("button", { name: "Thread actions", exact: true }).click();
+    const snoozed = page.getByRole("button", { name: /^Snoozed \d+$/ });
+    await snoozed.waitFor();
+    if ((await snoozed.getAttribute("aria-expanded")) !== "true") await snoozed.click();
     await thread.getByRole("button", { name: "Wake thread now", exact: true }).waitFor();
     await chooseNativeMenuItem(["Move to section", "Waiting"]);
     await thread.getByRole("button", { name: "Thread actions", exact: true }).click();
     await waiting(1).waitFor();
     await thread.getByRole("button", { name: "Settle thread", exact: true }).waitFor();
     step = "moving multiple selected threads through the native menu";
-    const modifier = process.platform === "darwin" ? "Meta" : "Control";
+    const modifier = HostProcess.Platform.defaultValue() === "darwin" ? "Meta" : "Control";
     await thread
       .locator('[role="button"]')
       .first()
