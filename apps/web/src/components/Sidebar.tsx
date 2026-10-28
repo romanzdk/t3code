@@ -3339,9 +3339,9 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                                 key="active-placeholder"
                                 marker="active-placeholder"
                                 label="Active"
-                                reserveSpace={from === "custom"}
                                 showHint={
                                   from !== null &&
+                                  from !== "custom" &&
                                   (activeThreads.length === 0 ||
                                     (from === "active" &&
                                       activeThreads.length === 1 &&

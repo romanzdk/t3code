@@ -91,7 +91,8 @@ try {
     await thread.getByRole("button", { name: "Thread actions", exact: true }).click();
     await waiting(0).waitFor();
     const second = page.locator("li[data-thread-item]", { hasText: "Second thread" });
-    const dragThreadTo = async (target: ReturnType<typeof page.locator>) => {
+    let dragNumber = 0;
+    const dragThreadTo = async (target: ReturnType<typeof page.locator>, cancel = false) => {
       await second.hover();
       const sourceBounds = await second.boundingBox();
       if (!sourceBounds) throw new Error("Missing drag bounds");
@@ -104,6 +105,12 @@ try {
       const targetBounds = await target.boundingBox();
       if (!targetBounds) throw new Error("Missing drop bounds");
       await page.mouse.move(targetBounds.x + 70, targetBounds.y + 5, { steps: 12 });
+      const hoveredBounds = await target.boundingBox();
+      if (!hoveredBounds || Math.abs(hoveredBounds.y - targetBounds.y) > 1)
+        throw new Error("Drop target moved away from the pointer during hover");
+      NodeFS.mkdirSync(artifactsDir, { recursive: true });
+      await page.screenshot({ path: NodePath.join(artifactsDir, `drag-${++dragNumber}.png`) });
+      if (cancel) await page.keyboard.press("Escape");
       await page.mouse.up();
     };
     step = "dropping a thread onto an empty category";
@@ -116,6 +123,11 @@ try {
     const review = (count: number) =>
       page.getByRole("button", { name: `Review ${count}`, exact: true });
     await review(0).click();
+    step = "canceling a category drag";
+    await dragThreadTo(review(0), true);
+    await waiting(1).waitFor();
+    await review(0).waitFor();
+    step = "dropping a categorized thread onto a collapsed category";
     await dragThreadTo(review(0));
     await review(1).waitFor();
     if ((await review(1).getAttribute("aria-expanded")) !== "true")
@@ -163,7 +175,7 @@ try {
     await second.getByRole("button", { name: "Thread actions", exact: true }).click();
     await waiting(2).waitFor();
     step = "returning a thread to an empty Active section";
-    await dragThreadTo(page.getByTestId("sidebar-active-placeholder"));
+    await dragThreadTo(page.getByTestId("sidebar-pinned-divider"));
     await waiting(1).waitFor();
     step = "checking category persistence";
     await page.reload();
