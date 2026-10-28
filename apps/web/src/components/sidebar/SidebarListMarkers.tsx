@@ -75,7 +75,7 @@ export function SidebarDragBoundary(props: {
     <SortableSidebarMarker
       marker={props.marker}
       data-testid={`sidebar-${props.marker}`}
-      className={cn("relative mx-0.5 -mb-px", props.visible ? "h-6" : "h-0")}
+      className={cn("relative mx-0.5", props.visible ? "h-6" : "h-0 -mb-px")}
     >
       {props.visible ? (
         <div className="sidebar-drag-boundary-label absolute inset-x-2 top-1 flex h-4 items-center gap-2">
