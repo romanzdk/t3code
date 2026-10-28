@@ -107,7 +107,9 @@ try {
       await page.mouse.move(targetBounds.x + 70, targetBounds.y + 5, { steps: 12 });
       const hoveredBounds = await target.boundingBox();
       if (!hoveredBounds || Math.abs(hoveredBounds.y - targetBounds.y) > 1)
-        throw new Error("Drop target moved away from the pointer during hover");
+        throw new Error(
+          `Drop target moved away from the pointer during hover: ${targetBounds.y} -> ${hoveredBounds?.y}`,
+        );
       NodeFS.mkdirSync(artifactsDir, { recursive: true });
       await page.screenshot({ path: NodePath.join(artifactsDir, `drag-${++dragNumber}.png`) });
       if (cancel) await page.keyboard.press("Escape");
@@ -133,7 +135,7 @@ try {
     if ((await review(1).getAttribute("aria-expanded")) !== "true")
       throw new Error("Category did not expand after drop");
     step = "returning a categorized thread to Active";
-    await dragThreadTo(thread);
+    await dragThreadTo(page.getByTestId("sidebar-pinned-divider"));
     await review(0).waitFor();
     step = "moving a pinned thread to a category";
     await chooseNativeMenuItem(["Pin thread"]);
