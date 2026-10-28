@@ -122,17 +122,18 @@ try {
     await waiting(1).waitFor();
     step = "dropping a categorized thread onto a collapsed category";
     await page.getByRole("button", { name: "New section", exact: true }).click();
-    await page.getByRole("textbox", { name: "Section name" }).fill("Review");
+    const reviewName = "Review changes waiting for someone else with a very long category name";
+    await page.getByRole("textbox", { name: "Section name" }).fill(reviewName);
     await page.getByRole("button", { name: "Create", exact: true }).click();
     const review = (count: number) =>
-      page.getByRole("button", { name: `Review ${count}`, exact: true });
+      page.getByRole("button", { name: `${reviewName} ${count}`, exact: true });
     await review(0).click();
     step = "canceling a category drag";
-    await dragThreadTo(categoryDropBox("Review"), true);
+    await dragThreadTo(categoryDropBox(reviewName), true);
     await waiting(1).waitFor();
     await review(0).waitFor();
     step = "dropping a categorized thread onto a collapsed category";
-    await dragThreadTo(categoryDropBox("Review"));
+    await dragThreadTo(categoryDropBox(reviewName));
     await review(1).waitFor();
     if ((await review(1).getAttribute("aria-expanded")) !== "true")
       throw new Error("Category did not expand after drop");

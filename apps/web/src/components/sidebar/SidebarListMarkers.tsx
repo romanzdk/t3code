@@ -48,7 +48,7 @@ export function SidebarSectionDropBox(props: { label: string; isDropTarget: bool
         props.isDropTarget && "border-primary/40 bg-primary/5 text-primary",
       )}
     >
-      {props.label}
+      <span className="min-w-0 truncate px-2">{props.label}</span>
     </div>
   );
 }
