@@ -51,7 +51,19 @@ export function createSidebarCollisionDetection(
     const pointer = args.pointerCoordinates;
     const items = options.items;
     if (pointer && items) {
-      const category = pointerWithin(args).find(({ id }) => {
+      const containersByNode = new Map(
+        args.droppableContainers.map((container) => [container.node.current, container]),
+      );
+      const node = args.droppableContainers.find((container) => container.node.current)?.node
+        .current;
+      const elements = node?.ownerDocument?.elementsFromPoint?.(pointer.x, pointer.y);
+      const pointerHits = elements
+        ? elements.flatMap((element) => {
+            const container = containersByNode.get(element as HTMLElement);
+            return container ? [{ id: container.id }] : [];
+          })
+        : pointerWithin(args);
+      const category = pointerHits.find(({ id }) => {
         if (id === args.active.id) return false;
         return (
           resolveSidebarCategoryDrop(items, String(args.active.id), String(id)) !== null &&

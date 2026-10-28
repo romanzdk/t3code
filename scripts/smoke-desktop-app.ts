@@ -92,14 +92,17 @@ try {
     await waiting(0).waitFor();
     const second = page.locator("li[data-thread-item]", { hasText: "Second thread" });
     const dragThreadTo = async (target: ReturnType<typeof page.locator>) => {
+      await second.hover();
       const sourceBounds = await second.boundingBox();
-      const targetBounds = await target.boundingBox();
-      if (!sourceBounds || !targetBounds) throw new Error("Missing drag bounds");
+      if (!sourceBounds) throw new Error("Missing drag bounds");
       const x = sourceBounds.x + 70;
       const y = sourceBounds.y + sourceBounds.height - 12;
       await page.mouse.move(x, y);
       await page.mouse.down();
       await page.mouse.move(x + 10, y, { steps: 3 });
+      await target.hover({ trial: true, position: { x: 70, y: 5 } });
+      const targetBounds = await target.boundingBox();
+      if (!targetBounds) throw new Error("Missing drop bounds");
       await page.mouse.move(targetBounds.x + 70, targetBounds.y + 5, { steps: 12 });
       await page.mouse.up();
     };

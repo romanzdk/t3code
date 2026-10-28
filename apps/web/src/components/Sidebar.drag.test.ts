@@ -767,7 +767,7 @@ describe("lifted card clearance", () => {
   });
 });
 
-it("uses the category under the pointer when a tall dragged card's center is below the header", () => {
+it.each([false, true])("uses the category under the pointer with a moved header: %s", (moved) => {
   const items = [
     pinnedHeader,
     divider,
@@ -777,6 +777,9 @@ it("uses the category under the pointer when a tall dragged card's center is bel
   ];
   const { rects, activeIndex } = layout(items, "source", sidebarMarkerId("custom-create"));
   const headerIndex = 3;
+  const headerNode = {
+    ownerDocument: { elementsFromPoint: () => [headerNode] },
+  } as unknown as HTMLElement;
   const collisionRect = rects[4]!;
   const args = {
     active: {
@@ -791,10 +794,10 @@ it("uses the category under the pointer when a tall dragged card's center is bel
       key: sidebarListItemId(item),
       disabled: false,
       data: { current: {} },
-      node: { current: null },
+      node: { current: moved && index === headerIndex ? headerNode : null },
       rect: { current: rects[index]! },
     })),
-    pointerCoordinates: { x: 100, y: rects[headerIndex]!.top + 5 },
+    pointerCoordinates: { x: 100, y: rects[headerIndex]!.top + (moved ? 100 : 5) },
   } satisfies Parameters<CollisionDetection>[0];
   const detector = createSidebarCollisionDetection(
     (id) => id === sidebarMarkerId("custom-header:waiting"),
