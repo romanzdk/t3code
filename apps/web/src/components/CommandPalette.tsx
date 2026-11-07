@@ -57,6 +57,7 @@ import {
   ArrowLeftIcon,
   BugIcon,
   ChartNoAxesColumnIcon,
+  Columns3Icon,
   CheckIcon,
   ChevronRightIcon,
   CornerLeftUpIcon,
@@ -1594,6 +1595,17 @@ function OpenCommandPaletteDialog(props: {
       },
     });
   }
+
+  actionItems.push({
+    kind: "action",
+    value: "action:board",
+    searchTerms: ["board", "kanban", "columns", "status", "threads", "needs", "waiting"],
+    title: "Open thread board",
+    icon: <Columns3Icon className={ITEM_ICON_CLASS} />,
+    run: async () => {
+      await navigate({ to: "/board" });
+    },
+  });
 
   actionItems.push({
     kind: "action",
